@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "League": {
+      "title": "League",
+      "description": "The main dynasty league object.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the league." },
+        "ownerId": { "type": "string", "description": "UID of the league creator." },
+        "currentYear": { "type": "integer", "description": "The current year of the dynasty." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp." }
+      },
+      "required": ["name", "ownerId", "createdAt"]
+    },
+    "Season": {
+      "title": "Season",
+      "description": "A specific season within a league.",
+      "type": "object",
+      "properties": {
+        "leagueId": { "type": "string", "description": "ID of the parent league." },
+        "year": { "type": "integer", "description": "The year of the season (e.g., 2024)." },
+        "isCurrent": { "type": "boolean", "description": "Whether this is the active season." }
+      },
+      "required": ["leagueId", "year"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "A team in the dynasty.",
+      "type": "object",
+      "properties": {
+        "leagueId": { "type": "string", "description": "ID of the parent league." },
+        "name": { "type": "string", "description": "Team name (e.g., Ohio State)." },
+        "ownerId": { "type": "string", "description": "UID of the user controlling the team." },
+        "coachName": { "type": "string", "description": "The name of the user/coach." },
+        "coachRole": { "type": "string", "enum": ["HC", "OC", "DC"], "description": "Coach role." },
+        "conference": { "type": "string", "description": "Conference name." }
+      },
+      "required": ["leagueId", "name"]
+    },
+    "Stat": {
+      "title": "Stat",
+      "description": "A statistical record for a player or team.",
+      "type": "object",
+      "properties": {
+        "seasonId": { "type": "string", "description": "ID of the season." },
+        "teamId": { "type": "string", "description": "ID of the team." },
+        "playerName": { "type": "string", "description": "Name of the player." },
+        "category": { "type": "string", "description": "Stat category (e.g., Passing, Rushing)." },
+        "value": { "type": "number", "description": "The statistical value." }
+      },
+      "required": ["seasonId", "teamId", "playerName", "category", "value"]
+    }
+  },
+  "firestore": {
+    "/leagues": { "schema": "League", "description": "Collection of dynasty leagues." },
+    "/leagues/{leagueId}/seasons": { "schema": "Season", "description": "Seasons for a specific league." },
+    "/leagues/{leagueId}/teams": { "schema": "Team", "description": "Teams in a specific league." },
+    "/leagues/{leagueId}/stats": { "schema": "Stat", "description": "Stats for a specific league." }
+  }
+}
