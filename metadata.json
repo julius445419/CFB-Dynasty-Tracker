@@ -1,5 +1,5 @@
 {
-  "name": "This Game Sux - CFB 26 Dynasty Tracker",
-  "description": "A collaborative platform for tracking stats, rankings, and history for College Football 26 online dynasties.",
+  "name": "College Football 26 Companion App",
+  "description": "A mobile-first companion app for EA Sports College Football 26 Online Dynasties, featuring team stats, box scores, and national leaderboards.",
   "requestFramePermissions": []
 }

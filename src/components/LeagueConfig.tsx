@@ -25,10 +25,14 @@ import {
   deleteDoc,
   getDocs,
   limit,
-  orderBy
+  orderBy,
+  setDoc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { User } from 'firebase/auth';
+import { useAuth } from '../context/AuthContext';
+import { useLeague } from '../context/LeagueContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { SCHOOLS, School } from '../constants/schools';
 
@@ -52,8 +56,9 @@ interface Team {
   color?: string;
 }
 
-export const LeagueConfig = ({ user }: { user: User | null }) => {
-  const [league, setLeague] = useState<League | null>(null);
+export const LeagueConfig = () => {
+  const { user } = useAuth();
+  const { leagueInfo: league, loading: leagueLoading } = useLeague();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -80,46 +85,30 @@ export const LeagueConfig = ({ user }: { user: User | null }) => {
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
 
   const filteredSchools = SCHOOLS.filter(s => 
-    s.name.toLowerCase().includes(schoolSearch.toLowerCase()) ||
-    s.conference.toLowerCase().includes(schoolSearch.toLowerCase())
+    (s.name?.toLowerCase() || '').includes(schoolSearch.toLowerCase()) ||
+    (s.conference?.toLowerCase() || '').includes(schoolSearch.toLowerCase())
   ).slice(0, 5);
 
   useEffect(() => {
-    if (!user) return;
+    if (!league) {
+      setLoading(false);
+      return;
+    }
 
-    // Fetch the first league where the user is the owner
-    const leaguesQuery = query(
-      collection(db, 'leagues'),
-      where('ownerId', '==', user.uid),
-      limit(1)
-    );
-
-    const unsubscribeLeague = onSnapshot(leaguesQuery, (snapshot) => {
-      if (!snapshot.empty) {
-        const leagueDoc = snapshot.docs[0];
-        const leagueData = { id: leagueDoc.id, ...leagueDoc.data() } as League;
-        setLeague(leagueData);
-
-        // Fetch teams for this league
-        const teamsQuery = collection(db, 'leagues', leagueDoc.id, 'teams');
-        const unsubscribeTeams = onSnapshot(teamsQuery, (teamSnapshot) => {
-          const teamsList = teamSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team));
-          setTeams(teamsList);
-          setLoading(false);
-        });
-
-        return () => unsubscribeTeams();
-      } else {
-        setLoading(false);
-      }
+    // Fetch teams for this league
+    const teamsQuery = collection(db, 'leagues', league.id, 'teams');
+    const unsubscribeTeams = onSnapshot(teamsQuery, (teamSnapshot) => {
+      const teamsList = teamSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team));
+      setTeams(teamsList);
+      setLoading(false);
     }, (err) => {
-      console.error("Error fetching league:", err);
-      setError("Failed to load league settings.");
+      console.error("Error fetching teams:", err);
+      setError("Failed to load league teams.");
       setLoading(false);
     });
 
-    return () => unsubscribeLeague();
-  }, [user]);
+    return () => unsubscribeTeams();
+  }, [league]);
 
   const handleUpdatePhase = async (newPhase: 'Off Season' | 'Regular Season' | 'CFP Window') => {
     if (!league) return;
@@ -275,14 +264,33 @@ export const LeagueConfig = ({ user }: { user: User | null }) => {
     if (!user || !newLeagueName) return;
     setSaving(true);
     try {
-      await addDoc(collection(db, 'leagues'), {
-        name: newLeagueName,
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let shortId = '';
+      for (let i = 0; i < 4; i++) {
+        shortId += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+
+      await setDoc(doc(db, 'leagues', shortId), {
+        name: newLeagueName.trim(),
+        nameSearch: newLeagueName.trim().toUpperCase(),
         ownerId: user.uid,
         currentYear: 2024,
         currentWeek: 1,
         seasonPhase: 'Off Season',
-        createdAt: new Date().toISOString()
+        createdAt: serverTimestamp(),
+        commissioners: [user.uid]
       });
+
+      // Add owner to members subcollection
+      await setDoc(doc(db, 'leagues', shortId, 'members', user.uid), {
+        userId: user.uid,
+        role: 'owner',
+        displayName: user.displayName || 'League Owner',
+        joinedAt: serverTimestamp()
+      });
+
+      alert(`Dynasty Created! Your League ID is: ${shortId}`);
+
     } catch (err) {
       console.error("Error creating league:", err);
       setError("Failed to create league.");

@@ -11,7 +11,10 @@ service cloud.firestore {
     // Fields: leagueId (string), year (int), isCurrent (bool)
     //
     // Collection: teams
-    // Fields: leagueId (string), name (string), ownerId (string), conference (string)
+    // Fields: ownerId (string), ownerEmail (string), firstName (string), lastName (string), school (string), logoId (string|number), role (string), joinedAt (timestamp)
+    //
+    // Collection: requests
+    // Fields: userId (string), userEmail (string), firstName (string), lastName (string), school (string), logoId (string|number), role (string), status (string), createdAt (timestamp)
     //
     // Collection: games
     // Fields: week (int), homeTeamId (string), awayTeamId (string), homeScore (int), awayScore (int), status (string), leagueId (string), season (int)
@@ -36,22 +39,65 @@ service cloud.firestore {
     }
 
     function isLeagueOwner(leagueId) {
-      return isAuthenticated() && get(/databases/$(database)/documents/leagues/$(leagueId)).data.ownerId == request.auth.uid;
+      return isAuthenticated() && 
+             (get(/databases/$(database)/documents/leagues/$(leagueId)).data.ownerId == request.auth.uid ||
+              (request.auth.uid in get(/databases/$(database)/documents/leagues/$(leagueId)).data.commissioners));
     }
 
     function isValidLeague(data) {
       return data.keys().hasAll(['name', 'ownerId', 'createdAt']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.ownerId == request.auth.uid &&
+             data.ownerId is string &&
+             (!('nameSearch' in data) || data.nameSearch is string) &&
+             (!('commissioners' in data) || data.commissioners is list) &&
              (!('currentYear' in data) || data.currentYear is int) &&
-             (!('currentWeek' in data) || data.currentWeek is int);
+             (!('currentWeek' in data) || data.currentWeek is int) &&
+             (!('seasonPhase' in data) || data.seasonPhase is string);
+    }
+
+    function isValidGame(data) {
+      return data.keys().hasAll(['week', 'homeTeamId', 'awayTeamId', 'homeScore', 'awayScore', 'status', 'leagueId', 'season', 'isUvU', 'createdBy', 'homeTeamName', 'awayTeamName', 'createdAt', 'updatedAt']) &&
+             data.week is int &&
+             data.homeTeamId is string &&
+             data.awayTeamId is string &&
+             data.homeScore is int &&
+             data.awayScore is int &&
+             data.status in ['scheduled', 'final'] &&
+             data.leagueId is string &&
+             data.season is int &&
+             data.isUvU is bool &&
+             data.createdBy is string &&
+             data.homeTeamName is string &&
+             data.awayTeamName is string &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
     }
 
     function isValidTeam(data) {
-      return data.keys().hasAll(['leagueId', 'name', 'coachName', 'coachRole']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.coachName is string && data.coachName.size() > 0 &&
-             data.coachRole in ['HC', 'OC', 'DC'];
+      return data.keys().hasAll(['name', 'coachName', 'coachRole', 'leagueId', 'ownerId', 'conference', 'assignmentStatus', 'contractStart', 'createdAt']) &&
+             data.name is string &&
+             data.coachName is string &&
+             data.coachRole in ['HC', 'OC', 'DC'] &&
+             data.leagueId is string &&
+             (data.ownerId == null || data.ownerId is string) &&
+             data.conference is string &&
+             data.assignmentStatus in ['Active', 'Inactive'] &&
+             data.contractStart is timestamp &&
+             data.createdAt is timestamp &&
+             (!('isPlaceholder' in data) || data.isPlaceholder is bool) &&
+             (!('color' in data) || data.color is string) &&
+             (!('logoId' in data) || data.logoId == null || data.logoId is string || data.logoId is int);
+    }
+
+    function isValidRequest(data) {
+      return data.keys().hasAll(['userId', 'school', 'role', 'status']) &&
+             data.userId == request.auth.uid &&
+             data.school is string && data.school.size() > 0 &&
+             data.role in ['HC', 'OC', 'DC'] &&
+             data.status == 'pending' &&
+             (!('firstName' in data) || data.firstName is string) &&
+             (!('lastName' in data) || data.lastName is string) &&
+             (!('logoId' in data) || data.logoId == null || data.logoId is string || data.logoId is int);
     }
 
     function isValidPlayer(data) {
@@ -66,9 +112,45 @@ service cloud.firestore {
              data.ovr is int;
     }
 
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'displayName']) &&
+             data.email is string &&
+             data.displayName is string;
+    }
+
+    function isValidProspect(data) {
+      return data.keys().hasAll(['name', 'pos', 'stars', 'leagueId', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.pos is string &&
+             data.stars is int && data.stars >= 1 && data.stars <= 5 &&
+             data.leagueId is string &&
+             data.createdAt is timestamp &&
+             (!('archetype' in data) || data.archetype is string) &&
+             (!('hometown' in data) || data.hometown is string) &&
+             (!('state' in data) || data.state is string) &&
+             (!('height' in data) || data.height is string) &&
+             (!('weight' in data) || data.weight is int) &&
+             (!('ovr' in data) || data.ovr is int);
+    }
+
+    function isValidTarget(data) {
+      return data.keys().hasAll(['name', 'pos', 'stars', 'leagueId', 'teamId', 'scoutingStatus', 'priority', 'createdAt', 'updatedAt']) &&
+             data.name is string &&
+             data.pos is string &&
+             data.stars is int &&
+             data.leagueId is string &&
+             data.teamId is string &&
+             data.scoutingStatus in ['Normal', 'Gem', 'Bust'] &&
+             data.priority in ['Low', 'Med', 'High', 'Top Target'] &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             (!('notes' in data) || data.notes is string) &&
+             (!('topSchools' in data) || data.topSchools is string);
+    }
+
     // Rules
     match /leagues/{leagueId} {
-      allow read: if isAuthenticated();
+      allow get, list: if isAuthenticated();
       allow create: if isAuthenticated() && isValidLeague(request.resource.data);
       allow update: if isOwner(resource.data.ownerId) && isValidLeague(request.resource.data);
       allow delete: if isOwner(resource.data.ownerId);
@@ -80,8 +162,21 @@ service cloud.firestore {
 
       match /teams/{teamId} {
         allow read: if isAuthenticated();
-        allow create, update: if isLeagueOwner(leagueId) && isValidTeam(request.resource.data);
+        allow create: if (isLeagueOwner(leagueId) || (isAuthenticated() && request.resource.data.ownerId == 'cpu')) && isValidTeam(request.resource.data);
+        allow update: if isLeagueOwner(leagueId) && isValidTeam(request.resource.data);
         allow delete: if isLeagueOwner(leagueId);
+      }
+
+      match /members/{memberId} {
+        allow read: if isAuthenticated();
+        allow write: if isLeagueOwner(leagueId) || isOwner(memberId);
+      }
+
+      match /requests/{requestId} {
+        allow read: if isLeagueOwner(leagueId) || isOwner(requestId);
+        allow create: if isAuthenticated() && isValidRequest(request.resource.data);
+        allow update: if isLeagueOwner(leagueId);
+        allow delete: if isLeagueOwner(leagueId) || isOwner(requestId);
       }
 
       match /stats/{statId} {
@@ -91,18 +186,9 @@ service cloud.firestore {
 
       match /games/{gameId} {
         allow read: if isAuthenticated();
-        allow create: if isLeagueOwner(leagueId) || 
-                        (isAuthenticated() && 
-                         (exists(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(request.resource.data.homeTeamId)) && 
-                          get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(request.resource.data.homeTeamId)).data.ownerId == request.auth.uid) ||
-                         (exists(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(request.resource.data.awayTeamId)) && 
-                          get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(request.resource.data.awayTeamId)).data.ownerId == request.auth.uid));
-        allow update, delete: if isLeagueOwner(leagueId) || 
-                                (isAuthenticated() && 
-                                 (exists(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(resource.data.homeTeamId)) && 
-                                  get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(resource.data.homeTeamId)).data.ownerId == request.auth.uid) ||
-                                 (exists(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(resource.data.awayTeamId)) && 
-                                  get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(resource.data.awayTeamId)).data.ownerId == request.auth.uid));
+        allow create: if isAuthenticated() && isValidGame(request.resource.data);
+        allow update: if isAuthenticated() && isValidGame(request.resource.data);
+        allow delete: if isLeagueOwner(leagueId);
       }
 
       match /players/{playerId} {
@@ -127,10 +213,33 @@ service cloud.firestore {
         allow read: if isAuthenticated();
         allow write: if isLeagueOwner(leagueId);
       }
+
+      match /prospects/{prospectId} {
+        allow read: if isAuthenticated();
+        allow write: if isLeagueOwner(leagueId);
+      }
+
+      match /teams/{teamId}/targets/{targetId} {
+        allow read: if isAuthenticated() && 
+                      get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(teamId)).data.ownerId == request.auth.uid;
+        allow write: if isAuthenticated() && 
+                       get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(teamId)).data.ownerId == request.auth.uid &&
+                       isValidTarget(request.resource.data);
+      }
     }
     
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    // Collection Group Rules
+    match /{path=**}/teams/{teamId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.ownerId == request.auth.uid);
+    }
+
+    match /{path=**}/members/{memberId} {
+      allow read: if isOwner(memberId) || (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
   }
 }

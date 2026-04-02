@@ -50,6 +50,8 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { TeamAssignment, League, Player } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { useLeague } from '../context/LeagueContext';
 
 enum OperationType {
   CREATE = 'create',
@@ -102,7 +104,9 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
-export const Schools = ({ user }: { user: User | null }) => {
+export const Schools = () => {
+  const { user } = useAuth();
+  const { leagueInfo: userLeague, userRole } = useLeague();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedConference, setSelectedConference] = useState<string>('All');
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
@@ -112,7 +116,6 @@ export const Schools = ({ user }: { user: User | null }) => {
   // Dynasty Assignment State
   const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
   const [isAddPlayerModalOpen, setIsAddPlayerModalOpen] = useState(false);
-  const [userLeague, setUserLeague] = useState<{ id: string, name: string, seasonPhase: string } | null>(null);
   const [leagueTeams, setLeagueTeams] = useState<any[]>([]);
   const [schoolPlayers, setSchoolPlayers] = useState<Player[]>([]);
   const [coachName, setCoachName] = useState(user?.displayName || '');
@@ -137,83 +140,24 @@ export const Schools = ({ user }: { user: User | null }) => {
   });
 
   useEffect(() => {
-    if (!user) return;
+    if (!userLeague) {
+      setLeagueTeams([]);
+      setAllTeams([]);
+      return;
+    }
 
-    const leaguesQuery = query(
-      collection(db, 'leagues'),
-      where('ownerId', '==', user.uid),
-      limit(1)
-    );
-
-    const unsubscribe = onSnapshot(leaguesQuery, async (snapshot) => {
-      if (!snapshot.empty) {
-        const leagueDoc = snapshot.docs[0];
-        const leagueData = leagueDoc.data();
-        setUserLeague({ 
-          id: leagueDoc.id, 
-          name: leagueData.name,
-          ownerId: leagueData.ownerId,
-          seasonPhase: leagueData.seasonPhase || 'Off Season'
-        });
-
-        // Fetch all teams in this league to check for assignments
-        const teamsQuery = collection(db, 'leagues', leagueDoc.id, 'teams');
-        const unsubscribeTeams = onSnapshot(teamsQuery, (teamSnapshot) => {
-          const teams = teamSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          setLeagueTeams(teams);
-          setAllTeams(teams);
-        }, (error) => {
-          handleFirestoreError(error, OperationType.GET, `leagues/${leagueDoc.id}/teams`);
-        });
-        return () => unsubscribeTeams();
-      } else {
-        // If not a league owner, check if they are a team owner/coach
-        const teamsGroupQuery = query(
-          collectionGroup(db, 'teams'),
-          where('ownerId', '==', user.uid),
-          limit(1)
-        );
-
-        const teamSnapshot = await getDocs(teamsGroupQuery);
-        if (!teamSnapshot.empty) {
-          const teamDoc = teamSnapshot.docs[0];
-          const leagueId = teamDoc.ref.parent.parent?.id;
-          
-          if (leagueId) {
-            const leagueRef = doc(db, 'leagues', leagueId);
-            const leagueDoc = await getDoc(leagueRef);
-            if (leagueDoc.exists()) {
-              const leagueData = leagueDoc.data();
-              setUserLeague({
-                id: leagueDoc.id,
-                name: leagueData.name,
-                ownerId: leagueData.ownerId,
-                seasonPhase: leagueData.seasonPhase || 'Off Season'
-              });
-
-              const teamsQuery = collection(db, 'leagues', leagueId, 'teams');
-              const unsubscribeTeams = onSnapshot(teamsQuery, (ts) => {
-                const teams = ts.docs.map(d => ({ id: d.id, ...d.data() }));
-                setLeagueTeams(teams);
-                setAllTeams(teams);
-              }, (error) => {
-                handleFirestoreError(error, OperationType.GET, `leagues/${leagueId}/teams`);
-              });
-              return () => unsubscribeTeams();
-            }
-          }
-        }
-        
-        setUserLeague(null);
-        setLeagueTeams([]);
-        setAllTeams([]);
-      }
+    // Fetch all teams in this league to check for assignments
+    const teamsQuery = collection(db, 'leagues', userLeague.id, 'teams');
+    const unsubscribeTeams = onSnapshot(teamsQuery, (teamSnapshot) => {
+      const teams = teamSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setLeagueTeams(teams);
+      setAllTeams(teams);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'leagues');
+      handleFirestoreError(error, OperationType.GET, `leagues/${userLeague.id}/teams`);
     });
 
-    return () => unsubscribe();
-  }, [user]);
+    return () => unsubscribeTeams();
+  }, [userLeague]);
 
   useEffect(() => {
     if (!selectedSchool || !userLeague || !leagueTeams.length) {
@@ -411,6 +355,10 @@ export const Schools = ({ user }: { user: User | null }) => {
     return leagueTeams.find(t => t.name === selectedSchool.name);
   }, [selectedSchool, leagueTeams]);
 
+  const isCpuCoach = useMemo(() => {
+    return existingCoach?.ownerId === 'cpu';
+  }, [existingCoach]);
+
   const defaultStaff = useMemo(() => {
     if (!selectedSchool) return [];
     return DEFAULT_COACHES.filter(c => c.school === selectedSchool.name);
@@ -426,7 +374,8 @@ export const Schools = ({ user }: { user: User | null }) => {
     
     const isWindowOpen = userLeague.seasonPhase === 'Off Season' || userLeague.seasonPhase === 'CFP Window';
     
-    if (existingCoach && !isWindowOpen) {
+    // Allow assignment if there's no coach OR if the current coach is CPU
+    if (existingCoach && !isCpuCoach && !isWindowOpen) {
       setError("This program is currently under contract. Assignments are only allowed during Off Season or CFP Window.");
       return;
     }
@@ -435,19 +384,32 @@ export const Schools = ({ user }: { user: User | null }) => {
     setError(null);
 
     try {
-      await addDoc(collection(db, 'leagues', userLeague.id, 'teams'), {
-        name: selectedSchool.name,
-        coachName,
-        coachRole,
-        leagueId: userLeague.id,
-        ownerId: user.uid,
-        conference: selectedSchool.conference,
-        logoId: selectedSchool.logoId,
-        color: selectedSchool.color,
-        assignmentStatus: 'Active',
-        contractStart: serverTimestamp(),
-        createdAt: serverTimestamp()
-      });
+      if (existingCoach && isCpuCoach) {
+        // Update existing CPU team to be user-controlled
+        await updateDoc(doc(db, 'leagues', userLeague.id, 'teams', existingCoach.id!), {
+          coachName,
+          coachRole,
+          ownerId: user.uid,
+          assignmentStatus: 'Active',
+          contractStart: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // Add new team document
+        await addDoc(collection(db, 'leagues', userLeague.id, 'teams'), {
+          name: selectedSchool.name,
+          coachName,
+          coachRole,
+          leagueId: userLeague.id,
+          ownerId: user.uid,
+          conference: selectedSchool.conference,
+          logoId: selectedSchool.logoId,
+          color: selectedSchool.color,
+          assignmentStatus: 'Active',
+          contractStart: serverTimestamp(),
+          createdAt: serverTimestamp()
+        });
+      }
 
       setSaveSuccess(true);
       setTimeout(() => {
@@ -469,10 +431,10 @@ export const Schools = ({ user }: { user: User | null }) => {
 
   const filteredSchools = useMemo(() => {
     return SCHOOLS.filter(school => {
-      const matchesSearch = school.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = (school.name?.toLowerCase() || '').includes(searchQuery.toLowerCase());
       const matchesConference = selectedConference === 'All' || school.conference === selectedConference;
       return matchesSearch && matchesConference;
-    }).sort((a, b) => a.name.localeCompare(b.name));
+    }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [searchQuery, selectedConference]);
 
   const schoolCoaches = useMemo(() => {
@@ -1203,7 +1165,7 @@ export const Schools = ({ user }: { user: User | null }) => {
                         <p className="text-sm text-zinc-500 font-medium">You are now the {coachRole} of {selectedSchool.name}.</p>
                       </div>
                     </div>
-                  ) : existingCoach && userLeague.seasonPhase === 'Regular Season' ? (
+                  ) : (existingCoach && !isCpuCoach && userLeague.seasonPhase === 'Regular Season') ? (
                     <div className="space-y-8">
                       <div className="p-8 bg-zinc-950/50 border border-white/5 rounded-[2rem] space-y-6">
                         <div className="flex items-center gap-5">

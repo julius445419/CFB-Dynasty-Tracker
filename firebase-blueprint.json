@@ -28,14 +28,33 @@
       "description": "A team in the dynasty.",
       "type": "object",
       "properties": {
-        "leagueId": { "type": "string", "description": "ID of the parent league." },
-        "name": { "type": "string", "description": "Team name (e.g., Ohio State)." },
         "ownerId": { "type": "string", "description": "UID of the user controlling the team." },
-        "coachName": { "type": "string", "description": "The name of the user/coach." },
-        "coachRole": { "type": "string", "enum": ["HC", "OC", "DC"], "description": "Coach role." },
-        "conference": { "type": "string", "description": "Conference name." }
+        "ownerEmail": { "type": "string", "description": "Email of the user." },
+        "firstName": { "type": "string", "description": "First name of the coach." },
+        "lastName": { "type": "string", "description": "Last name of the coach." },
+        "school": { "type": "string", "description": "Team name (e.g., Ohio State)." },
+        "logoId": { "type": "string", "description": "ESPN logo ID." },
+        "role": { "type": "string", "enum": ["HC", "OC", "DC"], "description": "Coach role." },
+        "joinedAt": { "type": "string", "format": "date-time", "description": "When they joined." }
       },
-      "required": ["leagueId", "name"]
+      "required": ["ownerId", "school", "role"]
+    },
+    "Request": {
+      "title": "Request",
+      "description": "A request to join a league with a specific team.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the user." },
+        "userEmail": { "type": "string", "description": "Email of the user." },
+        "firstName": { "type": "string", "description": "First name of the coach." },
+        "lastName": { "type": "string", "description": "Last name of the coach." },
+        "school": { "type": "string", "description": "Desired school." },
+        "logoId": { "type": "string", "description": "ESPN logo ID." },
+        "role": { "type": "string", "enum": ["HC", "OC", "DC"], "description": "Desired role." },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "description": "Request status." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the request was made." }
+      },
+      "required": ["userId", "school", "role", "status"]
     },
     "Stat": {
       "title": "Stat",
@@ -49,12 +68,58 @@
         "value": { "type": "number", "description": "The statistical value." }
       },
       "required": ["seasonId", "teamId", "playerName", "category", "value"]
+    },
+    "Prospect": {
+      "title": "Prospect",
+      "description": "A recruit in the league.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "pos": { "type": "string" },
+        "stars": { "type": "integer" },
+        "archetype": { "type": "string" },
+        "hometown": { "type": "string" },
+        "state": { "type": "string" },
+        "height": { "type": "string" },
+        "weight": { "type": "integer" },
+        "ovr": { "type": "integer" },
+        "leagueId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "pos", "stars", "leagueId"]
+    },
+    "Target": {
+      "title": "Target",
+      "description": "A prospect tracked by a specific team.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "pos": { "type": "string" },
+        "stars": { "type": "integer" },
+        "archetype": { "type": "string" },
+        "hometown": { "type": "string" },
+        "state": { "type": "string" },
+        "height": { "type": "string" },
+        "weight": { "type": "integer" },
+        "ovr": { "type": "integer" },
+        "leagueId": { "type": "string" },
+        "teamId": { "type": "string" },
+        "scoutingStatus": { "type": "string", "enum": ["Normal", "Gem", "Bust"] },
+        "priority": { "type": "string", "enum": ["Low", "Med", "High", "Top Target"] },
+        "notes": { "type": "string" },
+        "topSchools": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "pos", "stars", "leagueId", "teamId", "scoutingStatus", "priority"]
     }
   },
   "firestore": {
     "/leagues": { "schema": "League", "description": "Collection of dynasty leagues." },
     "/leagues/{leagueId}/seasons": { "schema": "Season", "description": "Seasons for a specific league." },
     "/leagues/{leagueId}/teams": { "schema": "Team", "description": "Teams in a specific league." },
-    "/leagues/{leagueId}/stats": { "schema": "Stat", "description": "Stats for a specific league." }
+    "/leagues/{leagueId}/stats": { "schema": "Stat", "description": "Stats for a specific league." },
+    "/leagues/{leagueId}/prospects": { "schema": "Prospect", "description": "Global pool of recruits for the league." },
+    "/leagues/{leagueId}/teams/{teamId}/targets": { "schema": "Target", "description": "Recruits tracked by a specific team." }
   }
 }

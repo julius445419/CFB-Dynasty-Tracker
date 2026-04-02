@@ -17,13 +17,14 @@ export interface TeamAssignment {
   coachName: string;
   coachRole: 'HC' | 'OC' | 'DC';
   leagueId: string;
-  ownerId: string;
+  ownerId: string | null;
   conference: string;
   logoId?: number;
   color: string;
   assignmentStatus: 'Active' | 'Inactive';
   contractStart: any;
   createdAt: any;
+  isPlaceholder?: boolean;
 }
 
 export interface Player {
@@ -43,18 +44,34 @@ export interface Player {
   createdAt: any;
 }
 
+export interface TeamStats {
+  passingYards: number;
+  rushingYards: number;
+  firstDowns: number;
+  turnovers: number;
+  thirdDownMade: number;
+  thirdDownAtt: number;
+  topMinutes: number;
+  topSeconds: number;
+  updatedAt?: any;
+}
+
 export interface Game {
   id: string;
   week: number;
   homeTeamId: string;
   awayTeamId: string;
-  homeScore?: number;
-  awayScore?: number;
-  status: 'scheduled' | 'completed';
+  homeScore: number;
+  awayScore: number;
+  isUvU: boolean;
+  status: 'scheduled' | 'final';
   leagueId: string;
   season: number;
+  createdBy: string;
   createdAt: any;
   updatedAt: any;
+  homeStats?: TeamStats;
+  awayStats?: TeamStats;
 }
 
 export interface TeamGameStats {
@@ -110,4 +127,35 @@ export interface League {
   currentWeek: number;
   seasonPhase: 'Off Season' | 'Regular Season' | 'CFP Window';
   createdAt: any;
+}
+
+export interface Prospect {
+  id: string;
+  name: string;
+  pos: string;
+  stars: number;
+  archetype: string;
+  hometown: string;
+  state: string;
+  height: string;
+  weight: number;
+  ovr?: number;
+  leagueId: string;
+  createdAt: any;
+  commitStatus?: 'Uncommitted' | 'Committed' | 'Committed to My School' | 'Committed Elsewhere';
+  committedTo?: string;
+  committedByUserId?: string;
+}
+
+export interface Target extends Prospect {
+  prospectId: string;
+  scoutingStatus: 'Normal' | 'Gem' | 'Bust';
+  priority: 'Low' | 'Med' | 'High' | 'Top Target';
+  notes: string;
+  topSchools: string;
+  teamId: string;
+  updatedAt: any;
+  devTrait?: 'Normal' | 'Impact' | 'Star' | 'Elite' | 'Unknown';
+  scoutedRatings?: Record<string, string>;
+  visits?: string;
 }
