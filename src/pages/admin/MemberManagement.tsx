@@ -70,6 +70,67 @@ export const MemberManagement: React.FC = () => {
   const [selectedShadowCoach, setSelectedShadowCoach] = useState<TeamAssignment | null>(null);
   const [linkSearch, setLinkSearch] = useState('');
   const [linking, setLinking] = useState(false);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [editingGhostCoach, setEditingGhostCoach] = useState<TeamAssignment | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editRole, setEditRole] = useState<'HC' | 'OC' | 'DC'>('HC');
+  const [editSchool, setEditSchool] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const generateInviteCode = async (coachId: string) => {
+    setGeneratingCode(true);
+    try {
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const coachRef = doc(db, 'leagues', currentLeagueId!, 'teams', coachId);
+      await updateDoc(coachRef, {
+        inviteCode: code,
+        updatedAt: serverTimestamp()
+      });
+      setShadowCoaches(prev => prev.map(sc => sc.id === coachId ? { ...sc, inviteCode: code } : sc));
+    } catch (error) {
+      console.error("Error generating invite code:", error);
+      alert("Failed to generate invite code.");
+    } finally {
+      setGeneratingCode(false);
+    }
+  };
+
+  const handleEditGhostCoach = async () => {
+    if (!currentLeagueId || !editingGhostCoach) return;
+    setSavingEdit(true);
+    try {
+      const coachRef = doc(db, 'leagues', currentLeagueId, 'teams', editingGhostCoach.id!);
+      const schoolData = SCHOOLS.find(s => s.name === editSchool);
+      await updateDoc(coachRef, {
+        coachName: `${editFirstName} ${editLastName}`,
+        firstName: editFirstName,
+        lastName: editLastName,
+        name: editSchool,
+        school: editSchool,
+        coachRole: editRole,
+        role: editRole,
+        conference: schoolData?.conference || 'Independent',
+        logoId: schoolData?.logoId || null,
+        color: schoolData?.color || '#000000',
+        updatedAt: serverTimestamp()
+      });
+      setShadowCoaches(prev => prev.map(sc => sc.id === editingGhostCoach.id ? { 
+        ...sc, 
+        coachName: `${editFirstName} ${editLastName}`,
+        name: editSchool,
+        coachRole: editRole 
+      } : sc));
+      setIsEditModalOpen(false);
+      setEditingGhostCoach(null);
+    } catch (error) {
+      console.error("Error updating ghost coach:", error);
+      alert("Failed to update ghost coach.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   useEffect(() => {
     if (!currentLeagueId) return;
@@ -300,20 +361,49 @@ export const MemberManagement: React.FC = () => {
                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 text-zinc-500 text-[9px] font-black uppercase tracking-widest rounded border border-zinc-700">
                         {sc.coachRole} of {sc.name}
                       </span>
+                      {sc.inviteCode && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-orange-600/10 text-orange-500 text-[9px] font-black uppercase tracking-widest rounded border border-orange-600/20">
+                          Code: {sc.inviteCode}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => {
-                    setSelectedShadowCoach(sc);
-                    setIsLinkModalOpen(true);
-                  }}
-                  className="px-6 py-3 bg-zinc-800 text-zinc-400 rounded-xl text-sm font-bold hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 border border-zinc-700"
-                >
-                  <LinkIcon size={16} />
-                  Link to Account
-                </button>
+                <div className="flex items-center gap-2">
+                  {!sc.inviteCode && (
+                    <button
+                      onClick={() => generateInviteCode(sc.id!)}
+                      disabled={generatingCode}
+                      className="px-4 py-3 bg-zinc-800 text-zinc-400 rounded-xl text-xs font-bold hover:bg-zinc-700 transition-all border border-zinc-700"
+                    >
+                      {generatingCode ? 'Generating...' : 'Generate Invite Code'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setEditingGhostCoach(sc);
+                      setEditFirstName(sc.coachName.split(' ')[0] || '');
+                      setEditLastName(sc.coachName.split(' ').slice(1).join(' ') || '');
+                      setEditRole(sc.coachRole);
+                      setEditSchool(sc.name);
+                      setIsEditModalOpen(true);
+                    }}
+                    className="px-4 py-3 bg-zinc-800 text-zinc-400 rounded-xl text-xs font-bold hover:bg-zinc-700 transition-all border border-zinc-700"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedShadowCoach(sc);
+                      setIsLinkModalOpen(true);
+                    }}
+                    className="px-6 py-3 bg-zinc-800 text-zinc-400 rounded-xl text-sm font-bold hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 border border-zinc-700"
+                  >
+                    <LinkIcon size={16} />
+                    Link to Account
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -383,6 +473,100 @@ export const MemberManagement: React.FC = () => {
           ))}
         </div>
       </section>
+
+      {/* Edit Ghost Coach Modal */}
+      <AnimatePresence>
+        {isEditModalOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsEditModalOpen(false)}
+              className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="fixed inset-x-0 bottom-0 z-50 bg-zinc-900 rounded-t-[32px] border-t border-zinc-800 p-6 pb-24 sm:max-w-lg sm:mx-auto max-h-[92vh] overflow-y-auto custom-scrollbar"
+            >
+              <div className="w-12 h-1.5 bg-zinc-800 rounded-full mx-auto mb-6" />
+              
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-xl font-black text-white uppercase italic">Edit <span className="text-orange-600">Ghost Coach</span></h2>
+                  <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Updating {editingGhostCoach?.coachName}</p>
+                </div>
+                <button onClick={() => setIsEditModalOpen(false)} className="p-2 bg-zinc-800 rounded-full text-zinc-400">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">First Name</label>
+                    <input 
+                      type="text" 
+                      value={editFirstName}
+                      onChange={(e) => setEditFirstName(e.target.value)}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white font-bold focus:outline-none focus:ring-2 focus:ring-orange-600/50"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Last Name</label>
+                    <input 
+                      type="text" 
+                      value={editLastName}
+                      onChange={(e) => setEditLastName(e.target.value)}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white font-bold focus:outline-none focus:ring-2 focus:ring-orange-600/50"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">School</label>
+                  <input 
+                    type="text" 
+                    value={editSchool}
+                    onChange={(e) => setEditSchool(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-orange-600/50"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Coaching Role</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['HC', 'OC', 'DC'].map(role => (
+                      <button
+                        key={role}
+                        onClick={() => setEditRole(role as 'HC' | 'OC' | 'DC')}
+                        className={`py-3 rounded-xl font-black text-xs transition-all border ${
+                          editRole === role 
+                            ? 'bg-orange-600 border-orange-500 text-white' 
+                            : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+                        }`}
+                      >
+                        {role}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  disabled={savingEdit}
+                  onClick={handleEditGhostCoach}
+                  className="w-full bg-white text-black font-black py-5 rounded-2xl shadow-xl shadow-white/5 hover:bg-zinc-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {savingEdit ? <Loader2 className="animate-spin" size={20} /> : <Check size={20} />}
+                  SAVE CHANGES
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Link Account Modal */}
       <AnimatePresence>

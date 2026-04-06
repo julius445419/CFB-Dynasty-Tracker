@@ -5,53 +5,88 @@ import { useLeague } from '../context/LeagueContext';
 import { getTeamLogo, getTeamColor } from '../utils/teamAssets';
 import { RosterList } from '../components/roster/RosterList';
 import { MyBoard } from './MyBoard';
+import { CoachCard } from '../components/school/CoachCard';
+import { NextGameWidget } from '../components/school/NextGameWidget';
+import { RecentResultsWidget } from '../components/school/RecentResultsWidget';
+import { StatHub } from '../components/school/StatHub';
 import { useNavigate, useParams } from 'react-router-dom';
 import AddMatchupModal from '../components/modals/AddMatchupModal';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
+import { Game, Prospect, TeamAssignment } from '../types';
 
-type Tab = 'Roster' | 'Depth Chart' | 'Stats' | 'Recruiting';
+type Tab = 'Home' | 'Roster' | 'Depth Chart' | 'Stats' | 'Recruiting';
 
 export const MyTeam: React.FC = () => {
   const { user } = useAuth();
   const { userTeam: currentUserTeam, loading: leagueLoading, leagueInfo, currentLeagueId } = useLeague();
   const { teamId } = useParams<{ teamId: string }>();
-  const [targetTeam, setTargetTeam] = useState<any>(null);
-  const [loading, setLoading] = useState(!!teamId);
-  const [activeTab, setActiveTab] = useState<Tab>('Roster');
+  const [targetTeam, setTargetTeam] = useState<TeamAssignment | null>(null);
+  const [teams, setTeams] = useState<TeamAssignment[]>([]);
+  const [games, setGames] = useState<Game[]>([]);
+  const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [opponent, setOpponent] = useState<TeamAssignment | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>('Home');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const navigate = useNavigate();
 
   const isReadOnly = teamId ? targetTeam?.ownerId !== user?.uid : false;
 
   useEffect(() => {
-    if (!teamId) {
-      setTargetTeam(currentUserTeam);
-      setLoading(false);
-      return;
-    }
-
-    const fetchTeam = async () => {
+    const fetchData = async () => {
       if (!currentLeagueId) return;
       setLoading(true);
       try {
-        const teamRef = doc(db, 'leagues', currentLeagueId, 'teams', teamId);
-        const teamSnap = await getDoc(teamRef);
-        if (teamSnap.exists()) {
-          setTargetTeam({ id: teamSnap.id, ...teamSnap.data() });
-        } else {
-          // If teamId is a school name (fallback from NationalHub)
-          setTargetTeam({ school: teamId, role: 'CPU', isPlaceholder: false });
+        // Fetch all teams
+        const teamsRef = collection(db, 'leagues', currentLeagueId, 'teams');
+        const teamsSnap = await getDocs(teamsRef);
+        const allTeams = teamsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamAssignment));
+        setTeams(allTeams);
+
+        let teamData: TeamAssignment | null = null;
+        if (teamId) {
+          teamData = allTeams.find(t => t.id === teamId) || null;
+        } else if (currentUserTeam) {
+          teamData = currentUserTeam;
+        }
+
+        if (teamData) {
+          setTargetTeam(teamData);
+
+          // Fetch games
+          const gamesRef = collection(db, 'leagues', currentLeagueId, 'games');
+          const gamesSnap = await getDocs(gamesRef);
+          const allGames = gamesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+          const teamGames = allGames.filter(g => g.homeTeamId === teamData!.id || g.awayTeamId === teamData!.id);
+          setGames(teamGames);
+
+          // Fetch next opponent
+          const nextGame = teamGames.find(g => g.status === 'scheduled');
+          if (nextGame) {
+            const opponentId = nextGame.homeTeamId === teamData.id ? nextGame.awayTeamId : nextGame.homeTeamId;
+            const opponentData = allTeams.find(t => t.id === opponentId);
+            if (opponentData) {
+              setOpponent(opponentData);
+            }
+          }
+
+          // Fetch prospects
+          const prospectsRef = collection(db, 'leagues', currentLeagueId, 'prospects');
+          const qProspects = query(prospectsRef, where('committedTo', '==', teamData.name));
+          const prospectsSnap = await getDocs(qProspects);
+          const prospectsData = prospectsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Prospect));
+          setProspects(prospectsData);
         }
       } catch (error) {
-        console.error('Error fetching team:', error);
+        console.error('Error fetching team data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTeam();
+    fetchData();
   }, [teamId, currentUserTeam, currentLeagueId]);
 
   if (leagueLoading || loading) {
@@ -137,17 +172,21 @@ export const MyTeam: React.FC = () => {
             </div>
           </div>
           <div>
-            <h1 className="text-3xl font-black tracking-tighter uppercase">{targetTeam.school || targetTeam.name}</h1>
+            <h1 className="text-3xl font-black tracking-tighter uppercase flex flex-wrap items-baseline gap-3">
+              {targetTeam.school || targetTeam.name}
+              {targetTeam.coachName && (
+                <span className="text-orange-500 text-xl italic lowercase first-letter:uppercase">
+                  Coach {targetTeam.coachName}
+                </span>
+              )}
+            </h1>
             <div className="flex items-center gap-3 mt-1">
               <span className="px-2 py-0.5 bg-orange-600 text-white text-[10px] font-black rounded uppercase tracking-widest">
                 {targetTeam.role || targetTeam.coachRole}
               </span>
-              {(targetTeam.coachName) && (
-                <span className="text-zinc-300 text-xs font-black uppercase italic tracking-tight">
-                  Coach {targetTeam.coachName}
-                </span>
-              )}
-              <span className="text-zinc-500 text-sm font-bold">0-0 RECORD</span>
+              <span className="text-zinc-500 text-sm font-bold">
+                {targetTeam.wins || 0}-{targetTeam.losses || 0} RECORD
+              </span>
             </div>
             {!isReadOnly && (
               <button
@@ -164,7 +203,7 @@ export const MyTeam: React.FC = () => {
         {/* Tabs Section */}
         <div className="mt-10 relative">
           <div className="flex items-center gap-8 border-b border-zinc-800 pb-4 overflow-x-auto no-scrollbar">
-            {(['Roster', 'Depth Chart', 'Stats', 'Recruiting'] as Tab[]).map((tab) => (
+            {(['Home', 'Roster', 'Depth Chart', 'Stats', 'Recruiting'] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -187,8 +226,43 @@ export const MyTeam: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="px-6 max-w-2xl mx-auto">
+      <main className="px-6 max-w-2xl mx-auto pb-24">
         <AnimatePresence mode="wait">
+          {activeTab === 'Home' && (
+            <motion.div
+              key="home"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
+            >
+              {/* Next Game & Recent Results */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {games.find(g => g.status === 'scheduled') && opponent && (
+                  <NextGameWidget game={games.find(g => g.status === 'scheduled')!} team={targetTeam} opponent={opponent} />
+                )}
+                <RecentResultsWidget games={games} team={targetTeam} teams={teams} />
+              </div>
+
+              <CoachCard team={targetTeam} isEditable={!isReadOnly} />
+
+              <StatHub team={targetTeam} games={games} />
+
+              {/* Recruiting Snapshot */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><Users size={16} className="text-orange-500" /> Recruiting Snapshot</h3>
+                <div className="flex justify-between">
+                  {[5, 4, 3, 2, 1].map(stars => (
+                    <div key={stars} className="text-center">
+                      <p className="text-2xl font-black">{prospects.filter(p => p.stars === stars).length}</p>
+                      <p className="text-[10px] font-bold text-zinc-500 uppercase">{stars}★</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
           {activeTab === 'Roster' && (
             <motion.div
               key="roster"
@@ -211,7 +285,7 @@ export const MyTeam: React.FC = () => {
               <MyBoard teamId={targetTeam.id} />
             </motion.div>
           )}
-          {activeTab !== 'Roster' && activeTab !== 'Recruiting' && (
+          {activeTab !== 'Home' && activeTab !== 'Roster' && activeTab !== 'Recruiting' && (
             <motion.div
               key="placeholder"
               initial={{ opacity: 0, scale: 0.95 }}

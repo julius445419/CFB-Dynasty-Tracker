@@ -846,13 +846,13 @@ export const Schools = () => {
                       </div>
                       {game.status === 'completed' && (
                         <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest border ${
-                          (isHome && game.homeScore > game.awayScore) || (!isHome && game.awayScore > game.homeScore)
+                          (isHome && (game.homeScore || 0) > (game.awayScore || 0)) || (!isHome && (game.awayScore || 0) > (game.homeScore || 0))
                             ? 'bg-green-500/10 text-green-500 border-green-500/20' 
                             : 'bg-red-500/10 text-red-500 border-red-500/20'
                         }`}>
-                          {isHome ? `${game.homeScore}-${game.awayScore}` : `${game.awayScore}-${game.homeScore}`}
+                          {isHome ? `${game.homeScore || 0}-${game.awayScore || 0}` : `${game.awayScore || 0}-${game.homeScore || 0}`}
                           {' '}
-                          {(isHome && game.homeScore > game.awayScore) || (!isHome && game.awayScore > game.homeScore) ? 'W' : 'L'}
+                          {(isHome && (game.homeScore || 0) > (game.awayScore || 0)) || (!isHome && (game.awayScore || 0) > (game.homeScore || 0)) ? 'W' : 'L'}
                         </span>
                       )}
                     </div>

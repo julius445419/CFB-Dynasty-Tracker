@@ -34,14 +34,20 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "julius445419@gmail.com" && request.auth.token.email_verified == true));
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
     function isLeagueOwner(leagueId) {
-      return isAuthenticated() && 
+      return isAdmin() || (isAuthenticated() && 
              (get(/databases/$(database)/documents/leagues/$(leagueId)).data.ownerId == request.auth.uid ||
-              (request.auth.uid in get(/databases/$(database)/documents/leagues/$(leagueId)).data.commissioners));
+              (request.auth.uid in get(/databases/$(database)/documents/leagues/$(leagueId)).data.commissioners)));
     }
 
     function isValidLeague(data) {
@@ -112,10 +118,30 @@ service cloud.firestore {
              data.ovr is int;
     }
 
+    function isValidActivityLog(data) {
+      return data.keys().hasAll(['leagueId', 'type', 'title', 'description', 'timestamp', 'metadata']) &&
+             data.leagueId is string &&
+             data.type in ['game_result', 'recruiting_commit', 'league_event'] &&
+             data.title is string &&
+             data.description is string &&
+             data.timestamp is timestamp &&
+             data.metadata is map;
+    }
+
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'displayName']) &&
              data.email is string &&
              data.displayName is string;
+    }
+
+    function isValidGlobalTeam(data) {
+      return data.keys().hasAll(['name', 'logoId', 'conference', 'color']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.conference is string &&
+             data.color is string &&
+             (!('isFCS' in data) || data.isFCS is bool) &&
+             (!('logoId' in data) || data.logoId == null || data.logoId is string || data.logoId is int) &&
+             (!('createdAt' in data) || data.createdAt is string || data.createdAt is timestamp);
     }
 
     function isValidProspect(data) {
@@ -130,7 +156,11 @@ service cloud.firestore {
              (!('state' in data) || data.state is string) &&
              (!('height' in data) || data.height is string) &&
              (!('weight' in data) || data.weight is int) &&
-             (!('ovr' in data) || data.ovr is int);
+             (!('ovr' in data) || data.ovr is int) &&
+             (!('commitStatus' in data) || data.commitStatus in ['Uncommitted', 'Committed']) &&
+             (!('committedTo' in data) || data.committedTo is string) &&
+             (!('committedByUserId' in data) || data.committedByUserId is string) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
     function isValidTarget(data) {
@@ -145,7 +175,8 @@ service cloud.firestore {
              data.createdAt is timestamp &&
              data.updatedAt is timestamp &&
              (!('notes' in data) || data.notes is string) &&
-             (!('topSchools' in data) || data.topSchools is string);
+             (!('topSchools' in data) || data.topSchools is string) &&
+             (!('prospectId' in data) || data.prospectId is string);
     }
 
     // Rules
@@ -216,15 +247,33 @@ service cloud.firestore {
 
       match /prospects/{prospectId} {
         allow read: if isAuthenticated();
-        allow write: if isLeagueOwner(leagueId);
+        allow create: if isAuthenticated() && isValidProspect(request.resource.data);
+        allow update: if isAuthenticated() && (
+          isLeagueOwner(leagueId) || 
+          (resource.data.commitStatus != 'Committed') ||
+          (resource.data.committedTo == get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(get(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)).data.teamId)).data.school) ||
+          (resource.data.committedByUserId == request.auth.uid)
+        ) && isValidProspect(request.resource.data);
+        allow delete: if isLeagueOwner(leagueId);
       }
 
       match /teams/{teamId}/targets/{targetId} {
         allow read: if isAuthenticated() && 
-                      get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(teamId)).data.ownerId == request.auth.uid;
-        allow write: if isAuthenticated() && 
-                       get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(teamId)).data.ownerId == request.auth.uid &&
+                      (get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(teamId)).data.ownerId == request.auth.uid ||
+                       isLeagueOwner(leagueId));
+        allow create, update: if isAuthenticated() && 
+                       (get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(teamId)).data.ownerId == request.auth.uid ||
+                        isLeagueOwner(leagueId)) &&
                        isValidTarget(request.resource.data);
+        allow delete: if isAuthenticated() && 
+                       (get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(teamId)).data.ownerId == request.auth.uid ||
+                        isLeagueOwner(leagueId));
+      }
+
+      match /activity_logs/{logId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && isValidActivityLog(request.resource.data);
+        allow update, delete: if isLeagueOwner(leagueId);
       }
     }
     
@@ -233,13 +282,18 @@ service cloud.firestore {
       allow write: if isOwner(userId) && isValidUser(request.resource.data);
     }
 
+    match /teams/{teamId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() && isValidGlobalTeam(request.resource.data);
+    }
+
     // Collection Group Rules
     match /{path=**}/teams/{teamId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.ownerId == request.auth.uid);
+      allow read: if isAuthenticated();
     }
 
     match /{path=**}/members/{memberId} {
-      allow read: if isOwner(memberId) || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow read: if isAuthenticated();
     }
   }
 }

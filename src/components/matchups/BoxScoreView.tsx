@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Game, TeamAssignment, TeamStats } from '../../types';
 import { Activity, Clock, ShieldAlert, Trophy } from 'lucide-react';
 import { getTeamColor } from '../../utils/teamAssets';
+import { parseTOPToSeconds, normalizeTOP, formatSecondsToMMSS } from '../../utils/topUtils';
 
 interface BoxScoreViewProps {
   game: Game;
@@ -26,19 +27,41 @@ export const BoxScoreView: React.FC<BoxScoreViewProps> = ({ game, homeTeam, away
   const homeColor = getTeamColor(homeTeam.name);
   const awayColor = getTeamColor(awayTeam.name);
 
+  const awaySeconds = parseTOPToSeconds(awayStats.timeOfPossession);
+  const homeSeconds = parseTOPToSeconds(homeStats.timeOfPossession);
+  const { awayNormalized, homeNormalized } = normalizeTOP(awaySeconds, homeSeconds);
+
   const statsList = [
-    { label: 'Passing Yards', away: awayStats.passingYards, home: homeStats.passingYards },
-    { label: 'Rushing Yards', away: awayStats.rushingYards, home: homeStats.rushingYards },
-    { label: 'Total Yards', away: awayStats.passingYards + awayStats.rushingYards, home: homeStats.passingYards + homeStats.rushingYards },
-    { label: 'First Downs', away: awayStats.firstDowns, home: homeStats.firstDowns },
-    { label: 'Turnovers', away: awayStats.turnovers, home: homeStats.turnovers, lowerIsBetter: true },
-    { label: '3rd Down Conv', away: `${awayStats.thirdDownMade}/${awayStats.thirdDownAtt}`, home: `${homeStats.thirdDownMade}/${homeStats.thirdDownAtt}`, 
-      awayVal: awayStats.thirdDownAtt > 0 ? awayStats.thirdDownMade / awayStats.thirdDownAtt : 0,
-      homeVal: homeStats.thirdDownAtt > 0 ? homeStats.thirdDownMade / homeStats.thirdDownAtt : 0
+    { label: 'Passing Yards', away: awayStats.passYards || 0, home: homeStats.passYards || 0 },
+    { label: 'Rushing Yards', away: awayStats.rushYards || 0, home: homeStats.rushYards || 0 },
+    { label: 'Total Yards', away: Number(awayStats.passYards || 0) + Number(awayStats.rushYards || 0), home: Number(homeStats.passYards || 0) + Number(homeStats.rushYards || 0) },
+    { label: 'Passing TDs', away: awayStats.passingTds || 0, home: homeStats.passingTds || 0 },
+    { label: 'Rushing TDs', away: awayStats.rushingTds || 0, home: homeStats.rushingTds || 0 },
+    { label: 'Completions', away: awayStats.completions || 0, home: homeStats.completions || 0 },
+    { label: 'Passing Att', away: awayStats.passingAttempts || 0, home: homeStats.passingAttempts || 0 },
+    { label: 'Rushing Att', away: awayStats.rushingAttempts || 0, home: homeStats.rushingAttempts || 0 },
+    { label: 'Total Plays', away: awayStats.totalPlays || 0, home: homeStats.totalPlays || 0 },
+    { label: 'First Downs', away: awayStats.firstDowns || 0, home: homeStats.firstDowns || 0 },
+    { label: '3rd Down Conv', away: `${awayStats.thirdDownMade || 0}/${awayStats.thirdDownAtt || 0}`, home: `${homeStats.thirdDownMade || 0}/${homeStats.thirdDownAtt || 0}`, 
+      awayVal: (awayStats.thirdDownAtt || 0) > 0 ? (awayStats.thirdDownMade || 0) / (awayStats.thirdDownAtt || 0) : 0,
+      homeVal: (homeStats.thirdDownAtt || 0) > 0 ? (homeStats.thirdDownMade || 0) / (homeStats.thirdDownAtt || 0) : 0
     },
-    { label: 'Time of Poss', away: `${awayStats.topMinutes}:${awayStats.topSeconds.toString().padStart(2, '0')}`, home: `${homeStats.topMinutes}:${homeStats.topSeconds.toString().padStart(2, '0')}`,
-      awayVal: awayStats.topMinutes * 60 + awayStats.topSeconds,
-      homeVal: homeStats.topMinutes * 60 + homeStats.topSeconds
+    { label: '4th Down Conv', away: `${awayStats.fourthDownConversions || 0}/${awayStats.fourthDownAttempts || 0}`, home: `${homeStats.fourthDownConversions || 0}/${homeStats.fourthDownAttempts || 0}`,
+      awayVal: (awayStats.fourthDownAttempts || 0) > 0 ? (awayStats.fourthDownConversions || 0) / (awayStats.fourthDownAttempts || 0) : 0,
+      homeVal: (homeStats.fourthDownAttempts || 0) > 0 ? (homeStats.fourthDownConversions || 0) / (homeStats.fourthDownAttempts || 0) : 0
+    },
+    { label: '2 Pt Conv', away: `${awayStats.twoPointConversions || 0}/${awayStats.twoPointAttempts || 0}`, home: `${homeStats.twoPointConversions || 0}/${homeStats.twoPointAttempts || 0}`,
+      awayVal: (awayStats.twoPointAttempts || 0) > 0 ? (awayStats.twoPointConversions || 0) / (awayStats.twoPointAttempts || 0) : 0,
+      homeVal: (homeStats.twoPointAttempts || 0) > 0 ? (homeStats.twoPointConversions || 0) / (homeStats.twoPointAttempts || 0) : 0
+    },
+    { label: 'Turnovers', away: awayStats.turnovers || 0, home: homeStats.turnovers || 0, lowerIsBetter: true },
+    { label: 'Fumbles Lost', away: awayStats.fumblesLost || 0, home: homeStats.fumblesLost || 0, lowerIsBetter: true },
+    { label: 'INTs Thrown', away: awayStats.interceptionsThrown || 0, home: homeStats.interceptionsThrown || 0, lowerIsBetter: true },
+    { label: 'Penalties', away: awayStats.penalties || 0, home: homeStats.penalties || 0, lowerIsBetter: true },
+    { label: 'Penalty Yards', away: awayStats.penaltyYards || 0, home: homeStats.penaltyYards || 0, lowerIsBetter: true },
+    { label: 'Time of Poss', away: formatSecondsToMMSS(awayNormalized), home: formatSecondsToMMSS(homeNormalized),
+      awayVal: awayNormalized,
+      homeVal: homeNormalized
     },
   ];
 

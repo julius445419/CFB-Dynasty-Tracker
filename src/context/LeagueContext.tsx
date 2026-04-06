@@ -5,6 +5,8 @@ import { db } from '../firebase';
 
 export type UserRole = 'Owner' | 'Commissioner' | 'Player' | 'Unassigned';
 
+import { LeagueSettings } from '../types';
+
 interface LeagueInfo {
   id: string;
   name: string;
@@ -12,6 +14,7 @@ interface LeagueInfo {
   seasonPhase: string;
   currentYear: number;
   currentWeek: number;
+  settings?: LeagueSettings;
 }
 
 interface UserTeam {
@@ -22,6 +25,7 @@ interface UserTeam {
   firstName?: string;
   lastName?: string;
   logoId?: string | number;
+  conference?: string;
 }
 
 interface LeagueContextType {
@@ -81,8 +85,9 @@ export const LeagueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           name: data.name,
           ownerId: data.ownerId,
           seasonPhase: data.seasonPhase || 'Off Season',
-          currentYear: data.currentYear || 2024,
-          currentWeek: data.currentWeek || 1,
+          currentYear: typeof data.currentYear === 'number' && !isNaN(data.currentYear) ? data.currentYear : 2024,
+          currentWeek: typeof data.currentWeek === 'number' && !isNaN(data.currentWeek) ? data.currentWeek : 1,
+          settings: data.settings,
         };
         setLeagueInfo(info);
         
@@ -125,7 +130,8 @@ export const LeagueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           coachName: teamData.coachName,
           firstName: teamData.firstName,
           lastName: teamData.lastName,
-          logoId: teamData.logoId
+          logoId: teamData.logoId,
+          conference: teamData.conference
         });
       } else {
         setUserTeam(null);

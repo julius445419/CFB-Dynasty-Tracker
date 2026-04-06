@@ -23,7 +23,7 @@ export const Standings: React.FC = () => {
         if (b.confWinPct !== a.confWinPct) return b.confWinPct - a.confWinPct;
         if (b.confWins !== a.confWins) return b.confWins - a.confWins;
         if (b.totalWinPct !== a.totalWinPct) return b.totalWinPct - a.totalWinPct;
-        return b.totalWins - a.totalWins;
+        return b.wins - a.wins;
       });
   }, [standings, selectedConference]);
 
@@ -165,12 +165,12 @@ export const Standings: React.FC = () => {
                         </td>
                         <td className="px-4 py-5 text-center">
                           <span className="text-sm font-black text-white">
-                            {team.confWins}-{team.confLosses}
+                            {team.confWins || 0}-{team.confLosses || 0}
                           </span>
                         </td>
                         <td className="px-4 py-5 text-center">
                           <span className="text-sm font-bold text-zinc-400">
-                            {team.totalWins}-{team.totalLosses}
+                            {team.wins || 0}-{team.losses || 0}
                           </span>
                         </td>
                         <td className="px-4 py-5 text-center">

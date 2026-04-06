@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, 
@@ -9,7 +9,9 @@ import {
   CheckCircle2, 
   PlusCircle,
   AlertCircle,
-  Activity
+  Activity,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { 
   collection, 
@@ -19,17 +21,19 @@ import {
   orderBy,
   doc,
   updateDoc,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch,
+  increment,
+  getDocs
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useLeague } from '../context/LeagueContext';
 import { useAuth } from '../context/AuthContext';
-import { Game, TeamAssignment } from '../types';
+import { Game, TeamAssignment, TeamStats } from '../types';
 import { getTeamLogo } from '../utils/teamAssets';
 import { Ghost } from 'lucide-react';
-import ScoreEntryModal from '../components/modals/ScoreEntryModal';
+import { UnifiedStatEntryModal } from '../components/modals/UnifiedStatEntryModal';
 import AddMatchupModal from '../components/modals/AddMatchupModal';
-import { TeamStatsDrawer } from '../components/modals/TeamStatsDrawer';
 import { BoxScoreView } from '../components/matchups/BoxScoreView';
 
 const MatchupHub: React.FC = () => {
@@ -39,9 +43,8 @@ const MatchupHub: React.FC = () => {
   const [games, setGames] = useState<Game[]>([]);
   const [teams, setTeams] = useState<Record<string, TeamAssignment>>({});
   const [loading, setLoading] = useState(true);
-  const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
+  const [isStatModalOpen, setIsStatModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isStatsDrawerOpen, setIsStatsDrawerOpen] = useState(false);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
 
   // Initialize selectedWeek once leagueInfo is available
@@ -94,14 +97,237 @@ const MatchupHub: React.FC = () => {
     return () => unsubscribe();
   }, [currentLeagueId, selectedWeek]);
 
-  const handleLogScore = (game: Game) => {
-    setSelectedGame(game);
-    setIsScoreModalOpen(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncStandings = async () => {
+    if (!currentLeagueId) return;
+    setIsSyncing(true);
+    
+    try {
+      const batch = writeBatch(db);
+      const teamsRef = collection(db, 'leagues', currentLeagueId, 'teams');
+      const gamesRef = collection(db, 'leagues', currentLeagueId, 'games');
+      
+      const teamsSnap = await getDocs(teamsRef);
+      const finalGamesSnap = await getDocs(query(gamesRef, where('status', '==', 'final')));
+      
+      const teamRecords: Record<string, { wins: number, losses: number, confWins: number, confLosses: number, pointsFor: number, pointsAgainst: number, schoolWins: number, schoolLosses: number, careerWins: number, careerLosses: number }> = {};
+      
+      teamsSnap.docs.forEach(doc => {
+        const data = doc.data() as TeamAssignment;
+        teamRecords[doc.id] = { 
+          wins: 0, 
+          losses: 0, 
+          confWins: 0, 
+          confLosses: 0, 
+          pointsFor: 0, 
+          pointsAgainst: 0,
+          schoolWins: data.schoolWins || 0,
+          schoolLosses: data.schoolLosses || 0,
+          careerWins: data.careerWins || 0,
+          careerLosses: data.careerLosses || 0
+        };
+      });
+      
+      finalGamesSnap.docs.forEach(gameDoc => {
+        const game = gameDoc.data() as Game;
+        const homeTeam = teamsSnap.docs.find(d => d.id === game.homeTeamId)?.data() as TeamAssignment | undefined;
+        const awayTeam = teamsSnap.docs.find(d => d.id === game.awayTeamId)?.data() as TeamAssignment | undefined;
+        
+        if (!homeTeam || !awayTeam) return;
+        
+        const isConfGame = homeTeam.conference === awayTeam.conference;
+        const homeWon = (game.homeScore ?? 0) > (game.awayScore ?? 0);
+        const awayWon = (game.awayScore ?? 0) > (game.homeScore ?? 0);
+
+        if (!teamRecords[game.homeTeamId]) {
+          teamRecords[game.homeTeamId] = { wins: 0, losses: 0, confWins: 0, confLosses: 0, pointsFor: 0, pointsAgainst: 0, schoolWins: 0, schoolLosses: 0, careerWins: 0, careerLosses: 0 };
+        }
+        if (!teamRecords[game.awayTeamId]) {
+          teamRecords[game.awayTeamId] = { wins: 0, losses: 0, confWins: 0, confLosses: 0, pointsFor: 0, pointsAgainst: 0, schoolWins: 0, schoolLosses: 0, careerWins: 0, careerLosses: 0 };
+        }
+        
+        teamRecords[game.homeTeamId].pointsFor += (game.homeScore || 0);
+        teamRecords[game.homeTeamId].pointsAgainst += (game.awayScore || 0);
+        teamRecords[game.awayTeamId].pointsFor += (game.awayScore || 0);
+        teamRecords[game.awayTeamId].pointsAgainst += (game.homeScore || 0);
+
+        if (homeWon) {
+          teamRecords[game.homeTeamId].wins++;
+          if (isConfGame) teamRecords[game.homeTeamId].confWins++;
+          teamRecords[game.awayTeamId].losses++;
+          if (isConfGame) teamRecords[game.awayTeamId].confLosses++;
+        } else if (awayWon) {
+          teamRecords[game.awayTeamId].wins++;
+          if (isConfGame) teamRecords[game.awayTeamId].confWins++;
+          teamRecords[game.homeTeamId].losses++;
+          if (isConfGame) teamRecords[game.homeTeamId].confLosses++;
+        }
+      });
+
+      // For now, let's make sure schoolWins/Losses at least reflect the current season if they were 0
+      Object.entries(teamRecords).forEach(([teamId, records]) => {
+        if (records.schoolWins === 0 && records.schoolLosses === 0) {
+          records.schoolWins = records.wins;
+          records.schoolLosses = records.losses;
+        }
+        if (records.careerWins === 0 && records.careerLosses === 0) {
+          records.careerWins = records.wins;
+          records.careerLosses = records.losses;
+        }
+      });
+      
+      Object.entries(teamRecords).forEach(([teamId, records]) => {
+        const teamRef = doc(db, 'leagues', currentLeagueId, 'teams', teamId);
+        batch.update(teamRef, {
+          ...records,
+          updatedAt: serverTimestamp()
+        });
+      });
+      
+      await batch.commit();
+      alert('Standings and records synced successfully!');
+    } catch (err) {
+      console.error("Error syncing standings:", err);
+      alert('Failed to sync standings.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
-  const handleOpenStats = (game: Game) => {
+  const handleLogScore = (game: Game) => {
     setSelectedGame(game);
-    setIsStatsDrawerOpen(true);
+    setIsStatModalOpen(true);
+  };
+
+  const handleSaveStats = async (stats: { homeScore: number; awayScore: number; homeStats: TeamStats; awayStats: TeamStats; quarterLengthAtGame?: number }) => {
+    if (!selectedGame) return;
+    
+    const batch = writeBatch(db);
+    const gameRef = doc(db, 'leagues', selectedGame.leagueId, 'games', selectedGame.id);
+    const homeTeamRef = doc(db, 'leagues', selectedGame.leagueId, 'teams', selectedGame.homeTeamId);
+    const awayTeamRef = doc(db, 'leagues', selectedGame.leagueId, 'teams', selectedGame.awayTeamId);
+
+    const isNewResult = selectedGame.status !== 'final';
+    const oldHomeScore = selectedGame.homeScore || 0;
+    const oldAwayScore = selectedGame.awayScore || 0;
+    const oldHomeWon = oldHomeScore > oldAwayScore;
+    const oldAwayWon = oldAwayScore > oldHomeScore;
+    
+    const newHomeWon = stats.homeScore > stats.awayScore;
+    const newAwayWon = stats.awayScore > stats.homeScore;
+
+    batch.update(gameRef, {
+      homeScore: stats.homeScore,
+      awayScore: stats.awayScore,
+      homeStats: stats.homeStats,
+      awayStats: stats.awayStats,
+      status: 'final',
+      updatedAt: serverTimestamp(),
+      quarterLengthAtGame: stats.quarterLengthAtGame
+    });
+
+    // Update Team Records (Bypass for FCS)
+    const isConfGame = teams[selectedGame.homeTeamId].conference === teams[selectedGame.awayTeamId].conference;
+
+    // Home Team Update
+    if (!teams[selectedGame.homeTeamId].isFCS) {
+      const homeUpdate: any = {
+        pointsFor: isNewResult ? increment(stats.homeScore) : increment(stats.homeScore - oldHomeScore),
+        pointsAgainst: isNewResult ? increment(stats.awayScore) : increment(stats.awayScore - oldAwayScore),
+        updatedAt: serverTimestamp()
+      };
+
+      if (isNewResult) {
+        homeUpdate.wins = newHomeWon ? increment(1) : increment(0);
+        homeUpdate.losses = newAwayWon ? increment(1) : increment(0);
+        homeUpdate.schoolWins = newHomeWon ? increment(1) : increment(0);
+        homeUpdate.schoolLosses = newAwayWon ? increment(1) : increment(0);
+        homeUpdate.careerWins = newHomeWon ? increment(1) : increment(0);
+        homeUpdate.careerLosses = newAwayWon ? increment(1) : increment(0);
+        if (isConfGame) {
+          if (newHomeWon) homeUpdate.confWins = increment(1);
+          else if (newAwayWon) homeUpdate.confLosses = increment(1);
+        }
+      } else {
+        // Winner changed?
+        if (newHomeWon && !oldHomeWon) {
+          homeUpdate.wins = increment(1);
+          homeUpdate.losses = increment(-1);
+          homeUpdate.schoolWins = increment(1);
+          homeUpdate.schoolLosses = increment(-1);
+          homeUpdate.careerWins = increment(1);
+          homeUpdate.careerLosses = increment(-1);
+          if (isConfGame) {
+            homeUpdate.confWins = increment(1);
+            homeUpdate.confLosses = increment(-1);
+          }
+        } else if (!newHomeWon && oldHomeWon) {
+          homeUpdate.wins = increment(-1);
+          homeUpdate.losses = increment(1);
+          homeUpdate.schoolWins = increment(-1);
+          homeUpdate.schoolLosses = increment(1);
+          homeUpdate.careerWins = increment(-1);
+          homeUpdate.careerLosses = increment(1);
+          if (isConfGame) {
+            homeUpdate.confWins = increment(-1);
+            homeUpdate.confLosses = increment(1);
+          }
+        }
+      }
+      batch.update(homeTeamRef, homeUpdate);
+    }
+
+    // Away Team Update
+    if (!teams[selectedGame.awayTeamId].isFCS) {
+      const awayUpdate: any = {
+        pointsFor: isNewResult ? increment(stats.awayScore) : increment(stats.awayScore - oldAwayScore),
+        pointsAgainst: isNewResult ? increment(stats.homeScore) : increment(stats.homeScore - oldHomeScore),
+        updatedAt: serverTimestamp()
+      };
+
+      if (isNewResult) {
+        awayUpdate.wins = newAwayWon ? increment(1) : increment(0);
+        awayUpdate.losses = newHomeWon ? increment(1) : increment(0);
+        awayUpdate.schoolWins = newAwayWon ? increment(1) : increment(0);
+        awayUpdate.schoolLosses = newHomeWon ? increment(1) : increment(0);
+        awayUpdate.careerWins = newAwayWon ? increment(1) : increment(0);
+        awayUpdate.careerLosses = newHomeWon ? increment(1) : increment(0);
+        if (isConfGame) {
+          if (newAwayWon) awayUpdate.confWins = increment(1);
+          else if (newHomeWon) awayUpdate.confLosses = increment(1);
+        }
+      } else {
+        // Winner changed?
+        if (newAwayWon && !oldAwayWon) {
+          awayUpdate.wins = increment(1);
+          awayUpdate.losses = increment(-1);
+          awayUpdate.schoolWins = increment(1);
+          awayUpdate.schoolLosses = increment(-1);
+          awayUpdate.careerWins = increment(1);
+          awayUpdate.careerLosses = increment(-1);
+          if (isConfGame) {
+            awayUpdate.confWins = increment(1);
+            awayUpdate.confLosses = increment(-1);
+          }
+        } else if (!newAwayWon && oldAwayWon) {
+          awayUpdate.wins = increment(-1);
+          awayUpdate.losses = increment(1);
+          awayUpdate.schoolWins = increment(-1);
+          awayUpdate.schoolLosses = increment(1);
+          awayUpdate.careerWins = increment(-1);
+          awayUpdate.careerLosses = increment(1);
+          if (isConfGame) {
+            awayUpdate.confWins = increment(-1);
+            awayUpdate.confLosses = increment(1);
+          }
+        }
+      }
+      batch.update(awayTeamRef, awayUpdate);
+    }
+
+    await batch.commit();
+    setIsStatModalOpen(false);
   };
 
   const weeks = Array.from({ length: 20 }, (_, i) => i + 1);
@@ -144,13 +370,25 @@ const MatchupHub: React.FC = () => {
             <Calendar className="w-5 h-5 text-orange-500" />
             {selectedWeek === leagueInfo?.currentWeek ? 'Active Matchups' : `Week ${selectedWeek} Schedule`}
           </h2>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-[10px] font-black px-3 py-1.5 rounded-lg border border-zinc-800 transition-all uppercase tracking-widest"
-          >
-            <PlusCircle className="w-3.5 h-3.5 text-orange-500" />
-            Add Matchup
-          </button>
+          <div className="flex items-center gap-2">
+            {(userRole === 'Owner' || userRole === 'Commissioner') && (
+              <button
+                onClick={handleSyncStandings}
+                disabled={isSyncing}
+                className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-[10px] font-black px-3 py-1.5 rounded-lg border border-zinc-800 transition-all uppercase tracking-widest disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-orange-500 ${isSyncing ? 'animate-spin' : ''}`} />
+                Sync Records
+              </button>
+            )}
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-[10px] font-black px-3 py-1.5 rounded-lg border border-zinc-800 transition-all uppercase tracking-widest"
+            >
+              <PlusCircle className="w-3.5 h-3.5 text-orange-500" />
+              Add Matchup
+            </button>
+          </div>
         </div>
 
         <AnimatePresence mode="popLayout">
@@ -176,7 +414,6 @@ const MatchupHub: React.FC = () => {
                   game={game} 
                   teams={teams} 
                   onLogScore={() => handleLogScore(game)}
-                  onOpenStats={() => handleOpenStats(game)}
                   userRole={userRole}
                   userId={user?.uid}
                 />
@@ -188,19 +425,14 @@ const MatchupHub: React.FC = () => {
 
       {selectedGame && (
         <>
-          <ScoreEntryModal
-            isOpen={isScoreModalOpen}
-            onClose={() => setIsScoreModalOpen(false)}
+          <UnifiedStatEntryModal
+            isOpen={isStatModalOpen}
+            onClose={() => setIsStatModalOpen(false)}
             game={selectedGame}
             homeTeam={teams[selectedGame.homeTeamId]}
             awayTeam={teams[selectedGame.awayTeamId]}
-          />
-          <TeamStatsDrawer
-            isOpen={isStatsDrawerOpen}
-            onClose={() => setIsStatsDrawerOpen(false)}
-            game={selectedGame}
-            homeTeam={teams[selectedGame.homeTeamId]}
-            awayTeam={teams[selectedGame.awayTeamId]}
+            onSave={handleSaveStats}
+            leagueSettings={leagueInfo?.settings}
           />
         </>
       )}
@@ -217,12 +449,11 @@ interface GameCardProps {
   game: Game;
   teams: Record<string, TeamAssignment>;
   onLogScore: () => void;
-  onOpenStats: () => void;
   userRole?: string;
   userId?: string;
 }
 
-const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, onOpenStats, userRole, userId }) => {
+const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, userId }) => {
   const [showBoxScore, setShowBoxScore] = useState(false);
   const homeTeam = teams[game.homeTeamId];
   const awayTeam = teams[game.awayTeamId];
@@ -280,12 +511,12 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, onOpenStat
           {isFinal ? (
             <div className="flex flex-col items-center gap-2">
               <div className="flex items-center gap-3">
-                <span className={`text-3xl font-black ${game.awayScore > game.homeScore ? 'text-white' : 'text-zinc-600'}`}>
-                  {game.awayScore}
+                <span className={`text-3xl font-black ${ (game.awayScore || 0) > (game.homeScore || 0) ? 'text-white' : 'text-zinc-600'}`}>
+                  {game.awayScore || 0}
                 </span>
                 <span className="text-zinc-700 font-bold text-sm italic">VS</span>
-                <span className={`text-3xl font-black ${game.homeScore > game.awayScore ? 'text-white' : 'text-zinc-600'}`}>
-                  {game.homeScore}
+                <span className={`text-3xl font-black ${ (game.homeScore || 0) > (game.awayScore || 0) ? 'text-white' : 'text-zinc-600'}`}>
+                  {game.homeScore || 0}
                 </span>
               </div>
               <div className="flex items-center gap-1 text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-full uppercase tracking-widest border border-emerald-500/20">
@@ -343,11 +574,11 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, onOpenStat
             
             {canLogStats && (
               <button
-                onClick={onOpenStats}
+                onClick={onLogScore}
                 className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-black px-4 py-2 rounded-xl border border-zinc-700 transition-all uppercase tracking-widest"
               >
                 <PlusCircle className="w-3.5 h-3.5 text-orange-500" />
-                Edit Team Stats
+                Edit Stats
               </button>
             )}
           </div>

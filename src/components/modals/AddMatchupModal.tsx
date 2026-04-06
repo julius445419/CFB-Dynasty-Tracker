@@ -17,6 +17,7 @@ import { useLeague } from '../../context/LeagueContext';
 import { useAuth } from '../../context/AuthContext';
 import { SCHOOLS } from '../../constants/schools';
 import { getTeamLogo } from '../../utils/teamAssets';
+import { TeamLogo } from '../common/TeamLogo';
 
 interface AddMatchupModalProps {
   isOpen: boolean;
@@ -51,12 +52,24 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
   // Search Results
   const homeResults = useMemo(() => {
     if (homeSearch.length < 2) return [];
-    return SCHOOLS.filter(s => (s.name?.toLowerCase() || '').includes(homeSearch.toLowerCase())).slice(0, 5);
+    const filtered = SCHOOLS.filter(s => (s.name?.toLowerCase() || '').includes(homeSearch.toLowerCase()));
+    // Sort: FBS first, then FCS
+    return filtered.sort((a, b) => {
+      if (a.isFCS && !b.isFCS) return 1;
+      if (!a.isFCS && b.isFCS) return -1;
+      return a.name.localeCompare(b.name);
+    }).slice(0, 10);
   }, [homeSearch]);
 
   const awayResults = useMemo(() => {
     if (awaySearch.length < 2) return [];
-    return SCHOOLS.filter(s => (s.name?.toLowerCase() || '').includes(awaySearch.toLowerCase())).slice(0, 5);
+    const filtered = SCHOOLS.filter(s => (s.name?.toLowerCase() || '').includes(awaySearch.toLowerCase()));
+    // Sort: FBS first, then FCS
+    return filtered.sort((a, b) => {
+      if (a.isFCS && !b.isFCS) return 1;
+      if (!a.isFCS && b.isFCS) return -1;
+      return a.name.localeCompare(b.name);
+    }).slice(0, 10);
   }, [awaySearch]);
 
   const [selectedHome, setSelectedHome] = useState(
@@ -76,6 +89,11 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
       return;
     }
 
+    if (selectedHome.isFCS) {
+      setError('FCS teams must always be the Away team.');
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -86,15 +104,23 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
       const snapshot = await getDocs(q);
       
       const existingGames = snapshot.docs.map(d => d.data());
-      const homeConflict = existingGames.find(g => g.homeTeamName === selectedHome.name || g.awayTeamName === selectedHome.name);
-      const awayConflict = existingGames.find(g => g.homeTeamName === selectedAway.name || g.awayTeamName === selectedAway.name);
+      
+      // Home Conflict (FBS only)
+      const homeConflict = existingGames.find(g => 
+        (g.homeTeamName === selectedHome.name || g.awayTeamName === selectedHome.name)
+      );
 
-      if (homeConflict) {
+      // Away Conflict (FBS only)
+      const awayConflict = existingGames.find(g => 
+        (g.homeTeamName === selectedAway.name || g.awayTeamName === selectedAway.name)
+      );
+
+      if (homeConflict && !selectedHome.isFCS) {
         setError(`${selectedHome.name} is already scheduled for Week ${selectedWeek}.`);
         setIsSubmitting(false);
         return;
       }
-      if (awayConflict) {
+      if (awayConflict && !selectedAway.isFCS) {
         setError(`${selectedAway.name} is already scheduled for Week ${selectedWeek}.`);
         setIsSubmitting(false);
         return;
@@ -117,6 +143,7 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
             conference: school.conference,
             logoId: school.logoId,
             color: school.color,
+            isFCS: !!school.isFCS,
             assignmentStatus: 'Active',
             contractStart: serverTimestamp(),
             createdAt: serverTimestamp()
@@ -251,11 +278,11 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
                     <div className="space-y-3 relative">
                       <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">Home Team</label>
                       {selectedHome ? (
-                        <div className="flex items-center justify-between p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
-                          <div className="flex items-center gap-3">
-                            <img src={getTeamLogo(selectedHome.name)} className="w-8 h-8 object-contain" referrerPolicy="no-referrer" />
-                            <span className="font-bold text-white">{selectedHome.name}</span>
-                          </div>
+                          <div className="flex items-center justify-between p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
+                            <div className="flex items-center gap-3">
+                              <TeamLogo schoolName={selectedHome.name} className="w-8 h-8 object-contain" />
+                              <span className="font-bold text-white">{selectedHome.name}</span>
+                            </div>
                           <button 
                             type="button" 
                             onClick={() => { setSelectedHome(null); setHomeSearch(''); }}
@@ -277,15 +304,20 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
                           {homeResults.length > 0 && (
                             <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden z-20 shadow-2xl">
                               {homeResults.map(school => (
-                                <button
-                                  key={school.name}
-                                  type="button"
-                                  onClick={() => setSelectedHome(school)}
-                                  className="w-full flex items-center gap-3 p-4 hover:bg-zinc-800 text-left transition-colors"
-                                >
-                                  <img src={getTeamLogo(school.name)} className="w-6 h-6 object-contain" referrerPolicy="no-referrer" />
-                                  <span className="text-sm font-bold text-white">{school.name}</span>
-                                </button>
+                                  <button
+                                    key={school.name}
+                                    type="button"
+                                    onClick={() => setSelectedHome(school)}
+                                    className="w-full flex items-center justify-between p-4 hover:bg-zinc-800 text-left transition-colors"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <TeamLogo schoolName={school.name} className="w-6 h-6 object-contain" />
+                                      <span className="text-sm font-bold text-white">{school.name}</span>
+                                    </div>
+                                    {school.isFCS && (
+                                      <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">FCS</span>
+                                    )}
+                                  </button>
                               ))}
                             </div>
                           )}
@@ -297,11 +329,11 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
                     <div className="space-y-3 relative">
                       <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">Away Team</label>
                       {selectedAway ? (
-                        <div className="flex items-center justify-between p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
-                          <div className="flex items-center gap-3">
-                            <img src={getTeamLogo(selectedAway.name)} className="w-8 h-8 object-contain" referrerPolicy="no-referrer" />
-                            <span className="font-bold text-white">{selectedAway.name}</span>
-                          </div>
+                          <div className="flex items-center justify-between p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
+                            <div className="flex items-center gap-3">
+                              <TeamLogo schoolName={selectedAway.name} className="w-8 h-8 object-contain" />
+                              <span className="font-bold text-white">{selectedAway.name}</span>
+                            </div>
                           <button 
                             type="button" 
                             onClick={() => { setSelectedAway(null); setAwaySearch(''); }}
@@ -323,15 +355,20 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
                           {awayResults.length > 0 && (
                             <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden z-20 shadow-2xl">
                               {awayResults.map(school => (
-                                <button
-                                  key={school.name}
-                                  type="button"
-                                  onClick={() => setSelectedAway(school)}
-                                  className="w-full flex items-center gap-3 p-4 hover:bg-zinc-800 text-left transition-colors"
-                                >
-                                  <img src={getTeamLogo(school.name)} className="w-6 h-6 object-contain" referrerPolicy="no-referrer" />
-                                  <span className="text-sm font-bold text-white">{school.name}</span>
-                                </button>
+                                  <button
+                                    key={school.name}
+                                    type="button"
+                                    onClick={() => setSelectedAway(school)}
+                                    className="w-full flex items-center justify-between p-4 hover:bg-zinc-800 text-left transition-colors"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <TeamLogo schoolName={school.name} className="w-6 h-6 object-contain" />
+                                      <span className="text-sm font-bold text-white">{school.name}</span>
+                                    </div>
+                                    {school.isFCS && (
+                                      <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">FCS</span>
+                                    )}
+                                  </button>
                               ))}
                             </div>
                           )}

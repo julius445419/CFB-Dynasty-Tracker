@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, serverTimestamp, writeBatch, increment } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { Game, TeamAssignment } from '../../types';
 import { getTeamLogo } from '../../utils/teamAssets';
+import { TeamLogo } from '../common/TeamLogo';
 
 interface ScoreEntryModalProps {
   isOpen: boolean;
@@ -43,16 +44,62 @@ const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
       return;
     }
 
+    if (hScore === aScore) {
+      setError('Games cannot end in a tie in college football.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      const batch = writeBatch(db);
       const gameRef = doc(db, 'leagues', game.leagueId, 'games', game.id);
-      await updateDoc(gameRef, {
+      const homeTeamRef = doc(db, 'leagues', game.leagueId, 'teams', game.homeTeamId);
+      const awayTeamRef = doc(db, 'leagues', game.leagueId, 'teams', game.awayTeamId);
+
+      batch.update(gameRef, {
         homeScore: hScore,
         awayScore: aScore,
         status: 'final',
         updatedAt: serverTimestamp()
       });
+
+      // Update Team Records (Bypass for FCS)
+      const isConfGame = homeTeam.conference === awayTeam.conference;
+
+      // Home Team Update
+      if (!homeTeam.isFCS) {
+        const homeUpdate: any = {
+          wins: hScore > aScore ? increment(1) : increment(0),
+          losses: aScore > hScore ? increment(1) : increment(0),
+          pointsFor: increment(hScore),
+          pointsAgainst: increment(aScore),
+          updatedAt: serverTimestamp()
+        };
+        if (isConfGame) {
+          if (hScore > aScore) homeUpdate.confWins = increment(1);
+          else if (aScore > hScore) homeUpdate.confLosses = increment(1);
+        }
+        batch.update(homeTeamRef, homeUpdate);
+      }
+
+      // Away Team Update
+      if (!awayTeam.isFCS) {
+        const awayUpdate: any = {
+          wins: aScore > hScore ? increment(1) : increment(0),
+          losses: hScore > aScore ? increment(1) : increment(0),
+          pointsFor: increment(aScore),
+          pointsAgainst: increment(hScore),
+          updatedAt: serverTimestamp()
+        };
+        if (isConfGame) {
+          if (aScore > hScore) awayUpdate.confWins = increment(1);
+          else if (hScore > aScore) awayUpdate.confLosses = increment(1);
+        }
+        batch.update(awayTeamRef, awayUpdate);
+      }
+
+      await batch.commit();
       onClose();
     } catch (err) {
       console.error("Error updating score:", err);
@@ -112,11 +159,9 @@ const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                   {/* Away Team Input */}
                   <div className="space-y-4 text-center">
                     <div className="w-20 h-20 bg-zinc-900 rounded-3xl p-3 mx-auto flex items-center justify-center shadow-xl border border-zinc-800">
-                      <img 
-                        src={getTeamLogo(awayTeam.name)} 
-                        alt={awayTeam.name}
+                      <TeamLogo 
+                        schoolName={awayTeam.name} 
                         className="w-full h-full object-contain"
-                        referrerPolicy="no-referrer"
                       />
                     </div>
                     <div className="space-y-1">
@@ -135,11 +180,9 @@ const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                   {/* Home Team Input */}
                   <div className="space-y-4 text-center">
                     <div className="w-20 h-20 bg-zinc-900 rounded-3xl p-3 mx-auto flex items-center justify-center shadow-xl border border-zinc-800">
-                      <img 
-                        src={getTeamLogo(homeTeam.name)} 
-                        alt={homeTeam.name}
+                      <TeamLogo 
+                        schoolName={homeTeam.name} 
                         className="w-full h-full object-contain"
-                        referrerPolicy="no-referrer"
                       />
                     </div>
                     <div className="space-y-1">

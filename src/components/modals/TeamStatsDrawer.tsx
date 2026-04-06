@@ -14,14 +14,14 @@ interface TeamStatsDrawerProps {
 }
 
 const DEFAULT_STATS: TeamStats = {
-  passingYards: 0,
-  rushingYards: 0,
-  firstDowns: 0,
+  passYards: 0,
+  rushYards: 0,
   turnovers: 0,
+  takeaways: 0,
+  firstDowns: 0,
   thirdDownMade: 0,
   thirdDownAtt: 0,
-  topMinutes: 0,
-  topSeconds: 0
+  timeOfPossession: '00:00'
 };
 
 export const TeamStatsDrawer: React.FC<TeamStatsDrawerProps> = ({
@@ -38,18 +38,34 @@ export const TeamStatsDrawer: React.FC<TeamStatsDrawerProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setAwayStats(game.awayStats || DEFAULT_STATS);
-      setHomeStats(game.homeStats || DEFAULT_STATS);
+      const parseTOP = (stats: TeamStats | undefined) => {
+        if (!stats) return DEFAULT_STATS;
+        if (stats.topMinutes !== undefined && stats.topSeconds !== undefined) return stats;
+        if (stats.timeOfPossession && stats.timeOfPossession.includes(':')) {
+          const [m, s] = stats.timeOfPossession.split(':').map(n => parseInt(n) || 0);
+          return { ...stats, topMinutes: m, topSeconds: s };
+        }
+        return { ...stats, topMinutes: 0, topSeconds: 0 };
+      };
+
+      setAwayStats(parseTOP(game.awayStats));
+      setHomeStats(parseTOP(game.homeStats));
     }
   }, [isOpen, game]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const formatTOP = (stats: TeamStats) => ({
+        ...stats,
+        timeOfPossession: `${(stats.topMinutes || 0).toString().padStart(2, '0')}:${(stats.topSeconds || 0).toString().padStart(2, '0')}`,
+        updatedAt: serverTimestamp()
+      });
+
       const gameRef = doc(db, 'leagues', game.leagueId, 'games', game.id);
       await updateDoc(gameRef, {
-        awayStats: { ...awayStats, updatedAt: serverTimestamp() },
-        homeStats: { ...homeStats, updatedAt: serverTimestamp() },
+        awayStats: formatTOP(awayStats),
+        homeStats: formatTOP(homeStats),
         updatedAt: serverTimestamp()
       });
       onClose();
@@ -61,6 +77,15 @@ export const TeamStatsDrawer: React.FC<TeamStatsDrawerProps> = ({
   };
 
   const updateStat = (team: 'away' | 'home', field: keyof TeamStats, value: string) => {
+    if (field === 'timeOfPossession') {
+      if (team === 'away') {
+        setAwayStats(prev => ({ ...prev, [field]: value }));
+      } else {
+        setHomeStats(prev => ({ ...prev, [field]: value }));
+      }
+      return;
+    }
+
     const numValue = parseInt(value) || 0;
     if (team === 'away') {
       setAwayStats(prev => ({ ...prev, [field]: numValue }));
@@ -135,13 +160,13 @@ export const TeamStatsDrawer: React.FC<TeamStatsDrawerProps> = ({
               <div className="grid grid-cols-2 gap-4">
                 <StatInput
                   label="Passing Yards"
-                  value={currentStats.passingYards}
-                  onChange={(val) => updateStat(activeTab, 'passingYards', val)}
+                  value={currentStats.passYards}
+                  onChange={(val) => updateStat(activeTab, 'passYards', val)}
                 />
                 <StatInput
                   label="Rushing Yards"
-                  value={currentStats.rushingYards}
-                  onChange={(val) => updateStat(activeTab, 'rushingYards', val)}
+                  value={currentStats.rushYards}
+                  onChange={(val) => updateStat(activeTab, 'rushYards', val)}
                 />
               </div>
 
@@ -149,58 +174,76 @@ export const TeamStatsDrawer: React.FC<TeamStatsDrawerProps> = ({
               <div className="bg-zinc-900/50 rounded-2xl p-4 border border-zinc-800 flex justify-between items-center">
                 <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Total Yards</span>
                 <span className="text-2xl font-black italic text-white">
-                  {currentStats.passingYards + currentStats.rushingYards}
+                  {currentStats.passYards + currentStats.rushYards}
                 </span>
               </div>
 
               {/* Game Flow */}
               <div className="grid grid-cols-2 gap-4">
                 <StatInput
-                  label="First Downs"
-                  value={currentStats.firstDowns}
-                  onChange={(val) => updateStat(activeTab, 'firstDowns', val)}
-                />
-                <StatInput
                   label="Turnovers"
-                  value={currentStats.turnovers}
+                  value={currentStats.turnovers || 0}
                   onChange={(val) => updateStat(activeTab, 'turnovers', val)}
                   icon={<ShieldAlert size={14} className="text-red-500" />}
                 />
+                <StatInput
+                  label="Takeaways"
+                  value={currentStats.takeaways || 0}
+                  onChange={(val) => updateStat(activeTab, 'takeaways', val)}
+                />
               </div>
 
-              {/* 3rd Down */}
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">3rd Down Conversions</label>
-                <div className="grid grid-cols-2 gap-4">
-                  <StatInput
-                    label="Made"
-                    value={currentStats.thirdDownMade}
-                    onChange={(val) => updateStat(activeTab, 'thirdDownMade', val)}
-                  />
-                  <StatInput
-                    label="Attempts"
-                    value={currentStats.thirdDownAtt}
-                    onChange={(val) => updateStat(activeTab, 'thirdDownAtt', val)}
-                  />
+              {/* Efficiency */}
+              <div className="grid grid-cols-2 gap-4">
+                <StatInput
+                  label="First Downs"
+                  value={currentStats.firstDowns || 0}
+                  onChange={(val) => updateStat(activeTab, 'firstDowns', val)}
+                />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-zinc-600 uppercase tracking-widest ml-1">3rd Down (Made/Att)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={currentStats.thirdDownMade || 0}
+                      onChange={(e) => updateStat(activeTab, 'thirdDownMade', e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-4 text-white font-black text-lg focus:outline-none focus:ring-2 focus:ring-orange-600/50 transition-all"
+                    />
+                    <span className="text-zinc-700 font-black">/</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={currentStats.thirdDownAtt || 0}
+                      onChange={(e) => updateStat(activeTab, 'thirdDownAtt', e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-4 text-white font-black text-lg focus:outline-none focus:ring-2 focus:ring-orange-600/50 transition-all"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Time of Possession */}
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-zinc-600 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                   <Clock size={14} className="text-orange-500" />
-                  Time of Possession
+                  Time of Possession (M:S)
                 </label>
-                <div className="grid grid-cols-2 gap-4">
-                  <StatInput
-                    label="Minutes"
-                    value={currentStats.topMinutes}
-                    onChange={(val) => updateStat(activeTab, 'topMinutes', val)}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={currentStats.topMinutes || 0}
+                    onChange={(e) => updateStat(activeTab, 'topMinutes', e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-4 text-white font-black text-lg focus:outline-none focus:ring-2 focus:ring-orange-600/50 transition-all"
+                    placeholder="MM"
                   />
-                  <StatInput
-                    label="Seconds"
-                    value={currentStats.topSeconds}
-                    onChange={(val) => updateStat(activeTab, 'topSeconds', val)}
+                  <span className="text-zinc-700 font-black">:</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={currentStats.topSeconds || 0}
+                    onChange={(e) => updateStat(activeTab, 'topSeconds', e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-4 text-white font-black text-lg focus:outline-none focus:ring-2 focus:ring-orange-600/50 transition-all"
+                    placeholder="SS"
                   />
                 </div>
               </div>

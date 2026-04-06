@@ -3,6 +3,7 @@ export interface School {
   logoId?: string | number;
   conference: string;
   color: string;
+  isFCS?: boolean;
 }
 
 export const SCHOOLS: School[] = [
@@ -34,6 +35,11 @@ export const SCHOOLS: School[] = [
   { name: "Duke", logoId: 150, conference: "ACC", color: "#003087" },
   { name: "East Carolina", logoId: 151, conference: "AAC", color: "#592A8A" },
   { name: "Eastern Michigan", logoId: 2199, conference: "MAC", color: "#006633" },
+  { name: "FCS East", logoId: "/assets/logos/resize.webp", conference: "FCS", color: "#444444", isFCS: true },
+  { name: "FCS West", logoId: "/assets/logos/resize.webp", conference: "FCS", color: "#444444", isFCS: true },
+  { name: "FCS Midwest", logoId: "/assets/logos/resize.webp", conference: "FCS", color: "#444444", isFCS: true },
+  { name: "FCS Southeast", logoId: "/assets/logos/resize.webp", conference: "FCS", color: "#444444", isFCS: true },
+  { name: "FCS Northwest", logoId: "/assets/logos/resize.webp", conference: "FCS", color: "#444444", isFCS: true },
   { name: "Florida", logoId: 57, conference: "SEC", color: "#0021A5" },
   { name: "Florida Atlantic", logoId: 2226, conference: "AAC", color: "#003366" },
   { name: "Florida International", logoId: 2229, conference: "C-USA", color: "#081E3F" },

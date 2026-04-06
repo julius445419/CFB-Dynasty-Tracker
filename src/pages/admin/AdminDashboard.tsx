@@ -1,9 +1,95 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, UserPlus, Calendar, Shield, ChevronRight, Trophy } from 'lucide-react';
+import { Users, UserPlus, Calendar, Shield, ChevronRight, Trophy, Database, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
+import { collection, getDocs, query, where, addDoc, writeBatch } from 'firebase/firestore';
+import { db, auth } from '../../firebase';
+import { SCHOOLS } from '../../constants/schools';
 
 const AdminDashboard: React.FC = () => {
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [seedStatus, setSeedStatus] = useState<{ type: 'success' | 'error' | 'idle', message: string }>({ type: 'idle', message: '' });
+
+  const isGlobalAdmin = auth.currentUser?.email === 'julius445419@gmail.com';
+
+  const seedFCSTeams = async () => {
+    setIsSeeding(true);
+    setSeedStatus({ type: 'idle', message: 'Checking for existing FCS teams...' });
+    
+    try {
+      const fcsTeams = SCHOOLS.filter(s => s.isFCS);
+      let addedCount = 0;
+      let skippedCount = 0;
+
+      for (const team of fcsTeams) {
+        const q = query(collection(db, 'teams'), where('name', '==', team.name));
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.empty) {
+          await addDoc(collection(db, 'teams'), {
+            name: team.name,
+            logoId: team.logoId,
+            logoUrl: team.logoId,
+            conference: team.conference,
+            color: team.color,
+            isFCS: true,
+            createdAt: new Date().toISOString()
+          });
+          addedCount++;
+        } else {
+          skippedCount++;
+        }
+      }
+
+      setSeedStatus({ 
+        type: 'success', 
+        message: `Seeding complete! Added ${addedCount} teams, skipped ${skippedCount} existing teams.` 
+      });
+    } catch (error: any) {
+      console.error('Seeding error:', error);
+      const errorMessage = error?.message || 'Unknown error';
+      setSeedStatus({ type: 'error', message: `Failed to seed FCS teams: ${errorMessage}` });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationStatus, setMigrationStatus] = useState<{ type: 'success' | 'error' | 'idle', message: string }>({ type: 'idle', message: '' });
+
+  const migrateFCSLogos = async () => {
+    setIsMigrating(true);
+    setMigrationStatus({ type: 'idle', message: 'Patching FCS team logos...' });
+    
+    try {
+      const q = query(collection(db, 'teams'), where('isFCS', '==', true));
+      const snapshot = await getDocs(q);
+      
+      let updatedCount = 0;
+      const batch = writeBatch(db);
+
+      snapshot.docs.forEach(teamDoc => {
+        batch.update(teamDoc.ref, {
+          logoId: '/assets/logos/resize.webp',
+          logoUrl: '/assets/logos/resize.webp',
+          updatedAt: new Date().toISOString()
+        });
+        updatedCount++;
+      });
+
+      await batch.commit();
+      setMigrationStatus({ 
+        type: 'success', 
+        message: `Migration complete! Updated ${updatedCount} FCS teams.` 
+      });
+    } catch (error: any) {
+      console.error('Migration error:', error);
+      setMigrationStatus({ type: 'error', message: `Failed to migrate logos: ${error.message}` });
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
   const adminTools = [
     {
       title: 'Member Management',
@@ -84,8 +170,107 @@ const AdminDashboard: React.FC = () => {
         ))}
       </div>
 
+      {/* System Maintenance */}
+      <div className="bg-zinc-900 p-8 rounded-[40px] border border-zinc-800 space-y-6 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-zinc-950 rounded-2xl flex items-center justify-center border border-zinc-900">
+              <Database className="text-orange-600 w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-white uppercase italic tracking-tight">System <span className="text-orange-600">Maintenance</span></h2>
+              <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Database Tools & Seeding</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {isGlobalAdmin ? (
+            <>
+              <div className="bg-zinc-950 p-6 rounded-3xl border border-zinc-900 space-y-4">
+                <div className="space-y-1">
+                  <h3 className="text-white font-bold flex items-center gap-2">
+                    Seed FCS Teams
+                  </h3>
+                  <p className="text-xs text-zinc-500 font-medium">Inject standard EA Sports placeholder teams (FCS East, West, etc.) into the database.</p>
+                </div>
+                
+                <button
+                  onClick={seedFCSTeams}
+                  disabled={isSeeding}
+                  className="w-full py-3 bg-zinc-900 text-white font-black rounded-2xl border border-zinc-800 hover:border-orange-500/50 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-[10px] disabled:opacity-50"
+                >
+                  {isSeeding ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-orange-600" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Database className="w-4 h-4 text-orange-600" />
+                      Run FCS Seeding
+                    </>
+                  )}
+                </button>
+
+                {seedStatus.type !== 'idle' && (
+                  <div className={`flex items-center gap-3 p-3 rounded-xl text-[10px] font-bold uppercase tracking-wider ${
+                    seedStatus.type === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'
+                  }`}>
+                    {seedStatus.type === 'success' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                    {seedStatus.message}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-zinc-950 p-6 rounded-3xl border border-zinc-900 space-y-4">
+                <div className="space-y-1">
+                  <h3 className="text-white font-bold flex items-center gap-2">
+                    Migrate FCS Logos
+                  </h3>
+                  <p className="text-xs text-zinc-500 font-medium">Patch existing FCS team records with the new local logo path.</p>
+                </div>
+                
+                <button
+                  onClick={migrateFCSLogos}
+                  disabled={isMigrating}
+                  className="w-full py-3 bg-zinc-900 text-white font-black rounded-2xl border border-zinc-800 hover:border-orange-500/50 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-[10px] disabled:opacity-50"
+                >
+                  {isMigrating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-orange-600" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Database className="w-4 h-4 text-orange-600" />
+                      Run Logo Migration
+                    </>
+                  )}
+                </button>
+
+                {migrationStatus.type !== 'idle' && (
+                  <div className={`flex items-center gap-3 p-3 rounded-xl text-[10px] font-bold uppercase tracking-wider ${
+                    migrationStatus.type === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'
+                  }`}>
+                    {migrationStatus.type === 'success' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                    {migrationStatus.message}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="bg-zinc-950 p-6 rounded-3xl border border-zinc-900 flex items-center justify-center h-full">
+              <p className="text-xs text-zinc-600 font-bold uppercase tracking-widest text-center">
+                Global admin access required for system maintenance.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Quick Stats / Info */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-[40px] p-8 mt-8">
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-[40px] p-8">
         <div className="flex items-center gap-4 mb-6">
           <div className="w-12 h-12 bg-orange-600 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-600/20">
             <Trophy className="text-white w-6 h-6" />

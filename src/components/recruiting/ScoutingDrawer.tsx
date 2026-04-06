@@ -99,16 +99,23 @@ export const ScoutingDrawer: React.FC<ScoutingDrawerProps> = ({ target, isOpen, 
       finalCommitStatus = 'Committed';
     }
 
+    // Only include globalData if it has actually changed
+    const globalData: { commitStatus?: string, committedTo?: string } = {};
+    const currentGlobalStatus = target.commitStatus || 'Uncommitted';
+    const currentGlobalSchool = target.committedTo || '';
+
+    if (finalCommitStatus !== currentGlobalStatus || finalCommittedTo !== currentGlobalSchool) {
+      globalData.commitStatus = finalCommitStatus;
+      globalData.committedTo = finalCommittedTo;
+    }
+
     await onSave(target.id, {
       notes,
       topSchools,
       devTrait,
       visits,
       scoutedRatings
-    }, {
-      commitStatus: finalCommitStatus,
-      committedTo: finalCommittedTo
-    });
+    }, globalData);
   };
 
   return (

@@ -11,8 +11,8 @@ import { Game, TeamAssignment } from '../types';
 import { SCHOOLS } from '../constants/schools';
 
 export interface TeamStanding extends TeamAssignment {
-  totalWins: number;
-  totalLosses: number;
+  wins: number;
+  losses: number;
   confWins: number;
   confLosses: number;
   totalWinPct: number;
@@ -31,16 +31,16 @@ export const useStandings = (leagueId: string | null) => {
 
     const teamsRef = collection(db, 'leagues', leagueId, 'teams');
     const gamesRef = collection(db, 'leagues', leagueId, 'games');
-    const finalGamesQuery = query(gamesRef, where('status', '==', 'final'), orderBy('updatedAt', 'desc'));
+    const finalGamesQuery = query(gamesRef, where('status', '==', 'final'));
 
     let teams: TeamAssignment[] = [];
     let games: Game[] = [];
 
     const calculateStandings = () => {
       const standingsMap: Record<string, TeamStanding> = {};
+      const idToNameMap: Record<string, string> = {};
 
-      // Initialize all schools from the SCHOOLS constant to ensure we have everyone
-      // but prioritize teams that exist in the league's teams collection
+      // Initialize all schools from the SCHOOLS constant
       SCHOOLS.forEach(school => {
         standingsMap[school.name] = {
           name: school.name,
@@ -55,8 +55,8 @@ export const useStandings = (leagueId: string | null) => {
           assignmentStatus: 'Inactive',
           contractStart: null,
           createdAt: null,
-          totalWins: 0,
-          totalLosses: 0,
+          wins: 0,
+          losses: 0,
           confWins: 0,
           confLosses: 0,
           totalWinPct: 0,
@@ -66,15 +66,15 @@ export const useStandings = (leagueId: string | null) => {
         } as any;
       });
 
-      // Override with actual league team data if available
+      // Override with actual league team data and build ID mapping
       teams.forEach(team => {
         const teamName = team.name || (team as any).school;
         if (standingsMap[teamName]) {
           standingsMap[teamName] = {
             ...standingsMap[teamName],
             ...team,
-            totalWins: 0,
-            totalLosses: 0,
+            wins: 0,
+            losses: 0,
             confWins: 0,
             confLosses: 0,
             totalWinPct: 0,
@@ -82,40 +82,47 @@ export const useStandings = (leagueId: string | null) => {
             streak: '-',
             lastFive: []
           };
+          if (team.id) {
+            idToNameMap[team.id] = teamName;
+          }
         }
       });
 
-      // Process games (sorted by updatedAt desc already, but we need chronological for streak)
-      // Actually for streak we need chronological order. Let's sort games by week.
+      // Process games chronologically for streak
       const chronologicalGames = [...games].sort((a, b) => a.week - b.week);
 
       chronologicalGames.forEach(game => {
-        const homeTeam = standingsMap[game.homeTeamId];
-        const awayTeam = standingsMap[game.awayTeamId];
+        const homeTeamName = idToNameMap[game.homeTeamId] || game.homeTeamId;
+        const awayTeamName = idToNameMap[game.awayTeamId] || game.awayTeamId;
+        
+        const homeTeam = standingsMap[homeTeamName];
+        const awayTeam = standingsMap[awayTeamName];
 
         if (!homeTeam || !awayTeam) return;
 
-        const homeWon = game.homeScore > game.awayScore;
+        const homeScore = game.homeScore || 0;
+        const awayScore = game.awayScore || 0;
+        const homeWon = homeScore > awayScore;
         const isConfGame = homeTeam.conference === awayTeam.conference;
 
         // Update Home Team
         if (homeWon) {
-          homeTeam.totalWins++;
+          homeTeam.wins++;
           if (isConfGame) homeTeam.confWins++;
           homeTeam.lastFive.push('W');
-        } else {
-          homeTeam.totalLosses++;
+        } else if (awayScore > homeScore) {
+          homeTeam.losses++;
           if (isConfGame) homeTeam.confLosses++;
           homeTeam.lastFive.push('L');
         }
 
         // Update Away Team
-        if (!homeWon) {
-          awayTeam.totalWins++;
+        if (awayScore > homeScore) {
+          awayTeam.wins++;
           if (isConfGame) awayTeam.confWins++;
           awayTeam.lastFive.push('W');
-        } else {
-          awayTeam.totalLosses++;
+        } else if (homeScore > awayScore) {
+          awayTeam.losses++;
           if (isConfGame) awayTeam.confLosses++;
           awayTeam.lastFive.push('L');
         }
@@ -127,10 +134,10 @@ export const useStandings = (leagueId: string | null) => {
 
       // Finalize stats and streaks
       const finalStandings = Object.values(standingsMap).map(team => {
-        const totalGames = team.totalWins + team.totalLosses;
+        const totalGames = team.wins + team.losses;
         const confGames = team.confWins + team.confLosses;
         
-        team.totalWinPct = totalGames > 0 ? team.totalWins / totalGames : 0;
+        team.totalWinPct = totalGames > 0 ? team.wins / totalGames : 0;
         team.confWinPct = confGames > 0 ? team.confWins / confGames : 0;
 
         // Calculate Streak

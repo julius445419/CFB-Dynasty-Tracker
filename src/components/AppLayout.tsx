@@ -7,23 +7,25 @@ import { twMerge } from 'tailwind-merge';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { RoleGate } from './RoleGate';
+import { useLeague } from '../context/LeagueContext';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const navItems = [
-  { icon: Home, label: 'Home', path: '/' },
-  { icon: Globe, label: 'Directory', path: '/national-hub' },
-  { icon: Trophy, label: 'Standings', path: '/standings' },
-  { icon: Activity, label: 'Leaders', path: '/leaders' },
-  { icon: Users, label: 'My Team', path: '/team' },
-  { icon: Sword, label: 'Matchups', path: '/matchups' },
-  { icon: Settings, label: 'Admin', path: '/admin' },
-];
-
 export const AppLayout: React.FC = () => {
   const navigate = useNavigate();
+  const { userTeam } = useLeague();
+
+  const navItems = [
+    { icon: Home, label: 'Home', path: '/' },
+    { icon: Globe, label: 'Directory', path: '/national-hub' },
+    { icon: Trophy, label: 'Standings', path: '/standings' },
+    { icon: Activity, label: 'Leaders', path: '/leaders' },
+    { icon: Users, label: 'My Team', path: userTeam ? `/school/${userTeam.id}` : '/team' },
+    { icon: Sword, label: 'Matchups', path: '/matchups' },
+    { icon: Settings, label: 'Admin', path: '/admin' },
+  ];
 
   const handleLogout = async () => {
     try {

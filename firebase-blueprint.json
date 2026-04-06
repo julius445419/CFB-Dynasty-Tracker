@@ -35,9 +35,34 @@
         "school": { "type": "string", "description": "Team name (e.g., Ohio State)." },
         "logoId": { "type": "string", "description": "ESPN logo ID." },
         "role": { "type": "string", "enum": ["HC", "OC", "DC"], "description": "Coach role." },
-        "joinedAt": { "type": "string", "format": "date-time", "description": "When they joined." }
+        "joinedAt": { "type": "string", "format": "date-time", "description": "When they joined." },
+        "wins": { "type": "integer" },
+        "losses": { "type": "integer" },
+        "confWins": { "type": "integer" },
+        "confLosses": { "type": "integer" },
+        "pointsFor": { "type": "integer" },
+        "pointsAgainst": { "type": "integer" },
+        "passYards": { "type": "integer" },
+        "rushYards": { "type": "integer" },
+        "totalYards": { "type": "integer" },
+        "passYardsAllowed": { "type": "integer" },
+        "rushYardsAllowed": { "type": "integer" },
+        "totalYardsAllowed": { "type": "integer" }
       },
       "required": ["ownerId", "school", "role"]
+    },
+    "GlobalTeam": {
+      "title": "GlobalTeam",
+      "description": "A college football team (FBS or FCS) available in the system.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logoId": { "type": "string" },
+        "conference": { "type": "string" },
+        "color": { "type": "string" },
+        "isFCS": { "type": "boolean", "description": "Whether this is a placeholder FCS team." }
+      },
+      "required": ["name", "logoId", "conference", "color"]
     },
     "Request": {
       "title": "Request",
@@ -115,6 +140,7 @@
     }
   },
   "firestore": {
+    "/teams": { "schema": "GlobalTeam", "description": "Global list of all schools (FBS and FCS)." },
     "/leagues": { "schema": "League", "description": "Collection of dynasty leagues." },
     "/leagues/{leagueId}/seasons": { "schema": "Season", "description": "Seasons for a specific league." },
     "/leagues/{leagueId}/teams": { "schema": "Team", "description": "Teams in a specific league." },

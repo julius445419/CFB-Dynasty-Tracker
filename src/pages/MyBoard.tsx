@@ -18,7 +18,7 @@ export const MyBoard: React.FC<MyBoardProps> = ({ teamId: propTeamId }) => {
   const { currentLeagueId, userTeam } = useLeague();
   const { user } = useAuth();
   const targetTeamId = propTeamId || userTeam?.id;
-  const isOwner = userTeam?.id === targetTeamId;
+  const isOwner = !!userTeam && targetTeamId === userTeam.id;
 
   const [targets, setTargets] = useState<Target[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,58 +27,71 @@ export const MyBoard: React.FC<MyBoardProps> = ({ teamId: propTeamId }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState<string>('All');
   const [showSuccess, setShowSuccess] = useState(false);
+  const [schoolName, setSchoolName] = useState<string>('');
 
   useEffect(() => {
     if (!currentLeagueId || !targetTeamId) return;
 
     setLoading(true);
+    let isMounted = true;
 
     if (isOwner) {
       // Owner View: Fetch private targets
       const targetsRef = collection(db, 'leagues', currentLeagueId, 'teams', targetTeamId, 'targets');
-      const unsubscribe = onSnapshot(targetsRef, async (snapshot) => {
-        const targetDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      const unsubscribe = onSnapshot(targetsRef, (snapshot) => {
+        const targetDocs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as any));
         
-        // Join with global prospect data
-        const joinedData = await Promise.all(targetDocs.map(async (t: any) => {
+        const joinData = async () => {
           try {
-            const pId = t.prospectId || t.id;
-            const prospectRef = doc(db, 'leagues', currentLeagueId, 'prospects', pId);
-            const prospectSnap = await getDoc(prospectRef);
-            if (prospectSnap.exists()) {
-              // CRITICAL: Private data (t) must overwrite global data
-              return { ...prospectSnap.data(), ...t } as Target;
-            }
-          } catch (err) {
-            console.error("Error joining prospect:", err);
-          }
-          return t as Target;
-        }));
+            const joinedData = await Promise.all(targetDocs.map(async (t: any) => {
+              const pId = t.prospectId || t.id;
+              const prospectRef = doc(db, 'leagues', currentLeagueId, 'prospects', pId);
+              const prospectSnap = await getDoc(prospectRef);
+              if (prospectSnap.exists()) {
+                // Ensure target ID (t.id) takes precedence over any ID in prospect data
+                return { ...prospectSnap.data(), ...t, id: t.id } as Target;
+              }
+              return { ...t, id: t.id } as Target;
+            }));
 
-        const priorityOrder: Record<string, number> = { 'Top Target': 0, 'High': 1, 'Med': 2, 'Low': 3 };
-        joinedData.sort((a, b) => {
-          const pA = priorityOrder[a.priority] ?? 4;
-          const pB = priorityOrder[b.priority] ?? 4;
-          if (pA !== pB) return pA - pB;
-          return a.name.localeCompare(b.name);
-        });
-        setTargets(joinedData);
-        setLoading(false);
+            if (!isMounted) return;
+
+            const priorityOrder: Record<string, number> = { 'Top Target': 0, 'High': 1, 'Med': 2, 'Low': 3 };
+            joinedData.sort((a, b) => {
+              const pA = priorityOrder[a.priority] ?? 4;
+              const pB = priorityOrder[b.priority] ?? 4;
+              if (pA !== pB) return pA - pB;
+              return a.name.localeCompare(b.name);
+            });
+            
+            setTargets(joinedData);
+          } catch (err) {
+            console.error("Error joining prospect data:", err);
+          } finally {
+            if (isMounted) setLoading(false);
+          }
+        };
+
+        joinData();
+      }, (err) => {
+        console.error("Targets snapshot error:", err);
+        if (isMounted) setLoading(false);
       });
-      return () => unsubscribe();
+      return () => {
+        isMounted = false;
+        unsubscribe();
+      };
     } else {
       // Visitor View: Fetch only committed prospects from global pool
-      // AND merge with viewer's private targets
       const fetchVisitorData = async () => {
-        if (!currentLeagueId || !targetTeamId) return;
-
         try {
           const teamRef = doc(db, 'leagues', currentLeagueId, 'teams', targetTeamId);
           const teamSnap = await getDoc(teamRef);
-          const schoolName = teamSnap.exists() ? (teamSnap.data().school || teamSnap.data().name) : targetTeamId;
+          const currentSchoolName = teamSnap.exists() ? (teamSnap.data().school || teamSnap.data().name) : targetTeamId;
+          if (isMounted) setSchoolName(currentSchoolName);
 
           const prospectsRef = collection(db, 'leagues', currentLeagueId, 'prospects');
-          const q = query(prospectsRef, where('committedTo', '==', schoolName));
+          const q = query(prospectsRef, where('committedTo', '==', currentSchoolName));
           
           const viewerTargetsRef = userTeam?.id 
             ? collection(db, 'leagues', currentLeagueId, 'teams', userTeam.id, 'targets')
@@ -88,11 +101,11 @@ export const MyBoard: React.FC<MyBoardProps> = ({ teamId: propTeamId }) => {
           let viewerScoutingData: Record<string, any> = {};
 
           const updateMerged = () => {
+            if (!isMounted) return;
             const merged = committedData.map(p => {
               const vs = viewerScoutingData[p.id];
               return {
                 ...p,
-                // Use viewer's private data if it exists, otherwise defaults
                 scoutingStatus: vs?.scoutingStatus || 'Normal',
                 priority: vs?.priority || 'Low',
                 notes: vs?.notes || '',
@@ -131,64 +144,92 @@ export const MyBoard: React.FC<MyBoardProps> = ({ teamId: propTeamId }) => {
           };
         } catch (err) {
           console.error("Error fetching visitor board:", err);
-          setLoading(false);
+          if (isMounted) setLoading(false);
         }
       };
       
       let unsub: any;
       fetchVisitorData().then(u => unsub = u);
-      return () => unsub?.();
+      return () => {
+        isMounted = false;
+        unsub?.();
+      };
     }
-  }, [currentLeagueId, targetTeamId, isOwner]);
+  }, [currentLeagueId, targetTeamId, isOwner, userTeam?.id]);
+
+  const handleFirestoreError = (error: any, operation: string, path: string) => {
+    const errInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      operationType: operation,
+      path,
+      authInfo: {
+        userId: user?.uid,
+        email: user?.email,
+        emailVerified: user?.emailVerified,
+        isAnonymous: user?.isAnonymous,
+      }
+    };
+    console.error(`Firestore Error [${operation}]:`, JSON.stringify(errInfo));
+    throw new Error(JSON.stringify(errInfo));
+  };
 
   const handleUpdateStatus = async (id: string, status: 'Normal' | 'Gem' | 'Bust') => {
     if (!currentLeagueId || !userTeam) return;
     
-    // Optimistic UI Update
+    const targetRef = doc(db, 'leagues', currentLeagueId, 'teams', userTeam.id, 'targets', id);
     const previousTargets = [...targets];
     setTargets(prev => prev.map(t => t.id === id ? { ...t, scoutingStatus: status } : t));
 
-    const targetRef = doc(db, 'leagues', currentLeagueId, 'teams', userTeam.id, 'targets', id);
     try {
       await updateDoc(targetRef, { scoutingStatus: status, updatedAt: serverTimestamp() });
     } catch (error) {
-      console.error("Error updating status:", error);
-      // Rollback on error
       setTargets(previousTargets);
+      handleFirestoreError(error, 'update', targetRef.path);
     }
   };
 
   const handleUpdatePriority = async (id: string, priority: 'Low' | 'Med' | 'High' | 'Top Target') => {
     if (!currentLeagueId || !userTeam) return;
 
-    // Optimistic UI Update
+    const targetRef = doc(db, 'leagues', currentLeagueId, 'teams', userTeam.id, 'targets', id);
     const previousTargets = [...targets];
     setTargets(prev => prev.map(t => t.id === id ? { ...t, priority } : t));
 
-    const targetRef = doc(db, 'leagues', currentLeagueId, 'teams', userTeam.id, 'targets', id);
     try {
       await updateDoc(targetRef, { priority, updatedAt: serverTimestamp() });
     } catch (error) {
-      console.error("Error updating priority:", error);
-      // Rollback on error
       setTargets(previousTargets);
+      handleFirestoreError(error, 'update', targetRef.path);
     }
   };
 
   const handleRemove = async (id: string) => {
-    if (!currentLeagueId || !userTeam) return;
+    if (!currentLeagueId || !userTeam) {
+      console.error("Cannot remove: missing leagueId or userTeam", { currentLeagueId, userTeamId: userTeam?.id });
+      return;
+    }
     
-    // Optimistic UI Update
+    const targetRef = doc(db, 'leagues', currentLeagueId, 'teams', userTeam.id, 'targets', id);
+    console.log(`Attempting to remove target. Path: ${targetRef.path}, ID: ${id}`);
+    
     const previousTargets = [...targets];
+    
+    // Optimistic update
     setTargets(prev => prev.filter(t => t.id !== id));
 
-    const targetRef = doc(db, 'leagues', currentLeagueId, 'teams', userTeam.id, 'targets', id);
     try {
       await deleteDoc(targetRef);
-    } catch (error) {
-      console.error("Error removing target:", error);
-      // Rollback on error
+      console.log(`Successfully deleted target document: ${id}`);
+    } catch (error: any) {
+      console.error(`Failed to delete target document: ${id}. Error: ${error.message}`, error);
       setTargets(previousTargets);
+      
+      // If it's a permission error, it might be because the path is wrong or rules are too strict
+      if (error.code === 'permission-denied') {
+        console.error("Permission denied. Check if you are the owner of this team and if the path is correct.");
+      }
+      
+      handleFirestoreError(error, 'delete', targetRef.path);
     }
   };
 
@@ -198,25 +239,48 @@ export const MyBoard: React.FC<MyBoardProps> = ({ teamId: propTeamId }) => {
     const target = targets.find(t => t.id === id);
     if (!target) return;
 
+    // Use prospectId if available, otherwise fallback to id (which might be the prospectId in legacy data)
+    const pId = target.prospectId || target.id;
     const batch = writeBatch(db);
     const targetRef = doc(db, 'leagues', currentLeagueId, 'teams', userTeam.id, 'targets', id);
-    const pId = target.prospectId || target.id;
     const prospectRef = doc(db, 'leagues', currentLeagueId, 'prospects', pId);
 
     // Update Private Target Record
+    const { id: _, ...targetData } = data; // Ensure we don't save 'id' field into document data
     batch.update(targetRef, {
-      ...data,
+      ...targetData,
       updatedAt: serverTimestamp()
     });
 
-    // Update Global Prospect Record
-    if (globalData.commitStatus) {
+    // Update Global Prospect Record ONLY if data is provided
+    if (globalData && Object.keys(globalData).length > 0) {
       batch.update(prospectRef, {
-        commitStatus: globalData.commitStatus,
-        committedTo: globalData.committedTo || '',
+        ...globalData,
         committedByUserId: user?.uid || '',
         updatedAt: serverTimestamp()
       });
+
+      // Log Activity if committed
+      if (globalData.commitStatus === 'Committed to My School' || globalData.commitStatus === 'Committed Elsewhere') {
+        const activityRef = collection(db, 'leagues', currentLeagueId, 'activity_logs');
+        const teamName = globalData.committedTo || userTeam?.name || 'a school';
+        const stars = target.stars ? `${target.stars}-Star ` : '';
+        const activityDoc = {
+          leagueId: currentLeagueId,
+          type: 'recruiting_commit',
+          title: 'Prospect Committed',
+          description: `${stars}${target.pos} ${target.name} has committed to ${teamName}`,
+          timestamp: serverTimestamp(),
+          metadata: {
+            prospectId: pId,
+            teamId: userTeam?.id,
+            isHumanInvolved: globalData.commitStatus === 'Committed to My School'
+          }
+        };
+        // We can't add to batch easily with addDoc, but we can use doc() with auto-id
+        const newActivityRef = doc(activityRef);
+        batch.set(newActivityRef, activityDoc);
+      }
     }
 
     try {
@@ -227,7 +291,7 @@ export const MyBoard: React.FC<MyBoardProps> = ({ teamId: propTeamId }) => {
         setIsDrawerOpen(false);
       }, 1500);
     } catch (error) {
-      console.error("Error saving scouting report:", error);
+      handleFirestoreError(error, 'write_batch', `target:${targetRef.path}, prospect:${prospectRef.path}`);
     }
   };
 
@@ -298,23 +362,33 @@ export const MyBoard: React.FC<MyBoardProps> = ({ teamId: propTeamId }) => {
           <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mb-4 border border-zinc-800">
             <ClipboardList className="text-zinc-700" size={32} />
           </div>
-          <h3 className="text-xl font-black text-white uppercase italic mb-2">Your Board is Empty</h3>
-          <p className="text-zinc-500 text-sm max-w-xs mb-6">Add your first recruit to start building your recruiting class.</p>
-          <button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="bg-orange-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-orange-600/20 active:scale-95 transition-transform"
-          >
-            Add Target
-          </button>
+          <h3 className="text-xl font-black text-white uppercase italic mb-2">
+            {isOwner ? 'Your Board is Empty' : 'No Committed Prospects'}
+          </h3>
+          <p className="text-zinc-500 text-sm max-w-xs mb-6">
+            {isOwner 
+              ? 'Add your first recruit to start building your recruiting class.' 
+              : `This school hasn't secured any commitments yet.`}
+          </p>
+          {isOwner && (
+            <button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-orange-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-orange-600/20 active:scale-95 transition-transform"
+            >
+              Add Target
+            </button>
+          )}
         </div>
       )}
 
-      <AddRecruitModal 
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        leagueId={currentLeagueId!}
-        teamId={userTeam?.id!}
-      />
+      {isOwner && userTeam && (
+        <AddRecruitModal 
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          leagueId={currentLeagueId!}
+          teamId={userTeam.id}
+        />
+      )}
 
       <ScoutingDrawer 
         target={selectedTarget}

@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Users, Ghost, Trophy, ChevronRight } from 'lucide-react';
 import { getTeamLogo } from '../utils/teamAssets';
+import { TeamLogo } from './common/TeamLogo';
 
 interface SchoolCardProps {
   school: {
@@ -61,11 +62,9 @@ export const SchoolCard: React.FC<SchoolCardProps> = ({ school, coach, onClick }
       <div className="flex flex-col items-center text-center space-y-4">
         <div className="relative w-20 h-20 flex items-center justify-center">
           <div className="absolute inset-0 bg-orange-600/5 blur-2xl rounded-full group-hover:bg-orange-600/10 transition-colors" />
-          <img
-            src={getTeamLogo(school.name)}
-            alt={school.name}
+          <TeamLogo
+            schoolName={school.name}
             className="w-full h-full object-contain relative z-10 drop-shadow-2xl group-hover:scale-110 transition-transform duration-500"
-            referrerPolicy="no-referrer"
           />
         </div>
 

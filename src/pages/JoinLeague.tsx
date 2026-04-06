@@ -10,7 +10,8 @@ import {
   updateDoc, 
   arrayUnion,
   setDoc,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -23,7 +24,8 @@ import {
   ArrowRight, 
   AlertCircle, 
   LogOut,
-  Search
+  Search,
+  Ghost
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
@@ -34,6 +36,7 @@ export const JoinLeague: React.FC = () => {
   const navigate = useNavigate();
   const [leagueId, setLeagueId] = useState('');
   const [passcode, setPasscode] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -94,14 +97,46 @@ export const JoinLeague: React.FC = () => {
         throw new Error('Invalid passcode. Access denied.');
       }
 
+      const batch = writeBatch(db);
+
+      // Handle Invite Code
+      if (inviteCode) {
+        const teamsRef = collection(db, 'leagues', leagueIdToJoin, 'teams');
+        const q = query(teamsRef, where('inviteCode', '==', inviteCode.trim().toUpperCase()));
+        const querySnap = await getDocs(q);
+        
+        if (querySnap.empty) {
+          throw new Error('Invalid invite code.');
+        }
+
+        const coachDoc = querySnap.docs[0];
+        const coachData = coachDoc.data();
+
+        if (!coachData.isPlaceholder) {
+          throw new Error('This coach is already linked.');
+        }
+
+        // Link user to coach
+        batch.update(coachDoc.ref, {
+          ownerId: user.uid,
+          isPlaceholder: false,
+          isLinked: true,
+          linkedUserId: user.uid,
+          inviteCode: null, // Invalidate code
+          updatedAt: serverTimestamp()
+        });
+      }
+
       // Add user to league members (use merge: true to update existing docs)
       const memberRef = doc(db, 'leagues', leagueIdToJoin, 'members', user.uid);
-      await setDoc(memberRef, {
+      batch.set(memberRef, {
         userId: user.uid,
         role: 'player',
         displayName: user.displayName || 'Coach',
         joinedAt: serverTimestamp()
       }, { merge: true });
+
+      await batch.commit();
 
       // CRITICAL: Select the league so the context picks it up
       selectLeague(leagueIdToJoin);
@@ -178,6 +213,20 @@ export const JoinLeague: React.FC = () => {
                   onChange={(e) => setPasscode(e.target.value)}
                   className="w-full bg-zinc-800/50 border border-zinc-700 rounded-2xl pl-12 pr-4 py-4 text-white focus:outline-none focus:ring-2 focus:ring-orange-600/50 transition-all text-lg font-bold tracking-widest"
                   placeholder="••••••••"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] ml-1">Invite Code (Optional)</label>
+              <div className="relative">
+                <Ghost className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  className="w-full bg-zinc-800/50 border border-zinc-700 rounded-2xl pl-12 pr-4 py-4 text-white focus:outline-none focus:ring-2 focus:ring-orange-600/50 transition-all text-lg font-bold uppercase"
+                  placeholder="ABC123"
                 />
               </div>
             </div>

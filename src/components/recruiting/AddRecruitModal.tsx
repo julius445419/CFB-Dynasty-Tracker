@@ -79,10 +79,24 @@ export const AddRecruitModal: React.FC<AddRecruitModalProps> = ({ isOpen, onClos
         
         // 2. Check if already on team board
         const targetsRef = collection(db, 'leagues', leagueId, 'teams', teamId, 'targets');
-        const targetQuery = query(targetsRef, where('name', '==', prospectData.name), where('pos', '==', prospectData.pos));
-        const targetSnapshot = await getDocs(targetQuery);
         
-        if (!targetSnapshot.empty) {
+        // Try checking by prospectId first (most accurate)
+        console.log(`Checking for duplicate prospectId: ${prospectData.id} in team: ${teamId}`);
+        const idQuery = query(targetsRef, where('prospectId', '==', prospectData.id));
+        const idSnapshot = await getDocs(idQuery);
+        
+        let isDuplicate = !idSnapshot.empty;
+
+        if (!isDuplicate) {
+          // Fallback: Check by name and position (for legacy data)
+          console.log(`No prospectId match, checking legacy name/pos: ${prospectData.name} (${prospectData.pos})`);
+          const nameQuery = query(targetsRef, where('name', '==', prospectData.name), where('pos', '==', prospectData.pos));
+          const nameSnapshot = await getDocs(nameQuery);
+          isDuplicate = !nameSnapshot.empty;
+        }
+        
+        if (isDuplicate) {
+          console.log("Duplicate found, stopping add process.");
           setStep('already-on-board');
           setFoundMatch(prospectData);
         } else {
@@ -100,15 +114,31 @@ export const AddRecruitModal: React.FC<AddRecruitModalProps> = ({ isOpen, onClos
     }
   };
 
+  const handleFirestoreError = (error: any, operation: string, path: string) => {
+    const errInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      operationType: operation,
+      path,
+    };
+    console.error(`Firestore Error [${operation}]:`, JSON.stringify(errInfo));
+    throw new Error(JSON.stringify(errInfo));
+  };
+
   const handleLinkExisting = async () => {
     if (!foundMatch) return;
     setIsSubmitting(true);
 
+    const targetsRef = collection(db, 'leagues', leagueId, 'teams', teamId, 'targets');
     try {
-      const targetsRef = collection(db, 'leagues', leagueId, 'teams', teamId, 'targets');
+      const { id: prospectId, ...prospectData } = foundMatch;
+      
+      // Ensure we don't save 'id' field into the target document
+      const cleanProspectData = { ...prospectData };
+      delete (cleanProspectData as any).id;
+
       await addDoc(targetsRef, {
-        ...foundMatch,
-        prospectId: foundMatch.id,
+        ...cleanProspectData,
+        prospectId: prospectId,
         teamId,
         scoutingStatus: 'Normal',
         priority: 'Low',
@@ -122,7 +152,7 @@ export const AddRecruitModal: React.FC<AddRecruitModalProps> = ({ isOpen, onClos
         handleClose();
       }, 2000);
     } catch (error) {
-      console.error('Error linking prospect to board:', error);
+      handleFirestoreError(error, 'add', targetsRef.path);
     } finally {
       setIsSubmitting(false);
     }
@@ -132,11 +162,13 @@ export const AddRecruitModal: React.FC<AddRecruitModalProps> = ({ isOpen, onClos
     e.preventDefault();
     setIsSubmitting(true);
 
+    const prospectsRef = collection(db, 'leagues', leagueId, 'prospects');
+    const targetsRef = collection(db, 'leagues', leagueId, 'teams', teamId, 'targets');
+
     try {
       const batch = writeBatch(db);
       
       // 1. Create in Global Pool
-      const prospectsRef = collection(db, 'leagues', leagueId, 'prospects');
       const newProspectRef = doc(prospectsRef);
       const prospectData = {
         name: `${firstName.trim()} ${lastName.trim()}`,
@@ -148,16 +180,19 @@ export const AddRecruitModal: React.FC<AddRecruitModalProps> = ({ isOpen, onClos
         height: fullData.height,
         weight: Number(fullData.weight),
         leagueId,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        commitStatus: 'Uncommitted',
+        committedTo: ''
       };
       
       batch.set(newProspectRef, prospectData);
 
       // 2. Create in Team Board
-      const targetsRef = collection(db, 'leagues', leagueId, 'teams', teamId, 'targets');
       const newTargetRef = doc(targetsRef);
+      // Ensure we don't save any 'id' field into the target document
+      const { id: _, ...prospectDataForTarget } = prospectData as any;
       batch.set(newTargetRef, {
-        ...prospectData,
+        ...prospectDataForTarget,
         prospectId: newProspectRef.id,
         teamId,
         scoutingStatus: 'Normal',
@@ -174,7 +209,7 @@ export const AddRecruitModal: React.FC<AddRecruitModalProps> = ({ isOpen, onClos
         handleClose();
       }, 2000);
     } catch (error) {
-      console.error('Error saving prospect:', error);
+      handleFirestoreError(error, 'write_batch', `prospects:${prospectsRef.path}, targets:${targetsRef.path}`);
     } finally {
       setIsSubmitting(false);
     }
