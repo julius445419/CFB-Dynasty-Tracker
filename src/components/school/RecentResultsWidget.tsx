@@ -11,7 +11,7 @@ export const RecentResultsWidget: React.FC<RecentResultsWidgetProps> = ({ games,
   const recentGames = games.filter(g => g.status === 'final').slice(-3).reverse();
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-6">
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 h-full">
       <h3 className="text-sm font-black text-white mb-4">Recent Results</h3>
       <div className="space-y-4">
         {recentGames.map(game => {

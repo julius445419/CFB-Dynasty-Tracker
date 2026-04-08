@@ -142,6 +142,14 @@ const AdminDashboard: React.FC = () => {
       bg: 'bg-yellow-500/10'
     },
     {
+      title: 'Bulk Stat Entry',
+      description: 'Spreadsheet-style interface to override team season totals.',
+      icon: Database,
+      path: '/admin/bulk-stats',
+      color: 'text-orange-600',
+      bg: 'bg-orange-600/10'
+    },
+    {
       title: 'League Settings',
       description: 'Configure league rules, year, and phase.',
       icon: Shield,

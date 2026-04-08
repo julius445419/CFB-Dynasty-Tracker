@@ -189,7 +189,7 @@
         "turnovers": { "type": "integer" },
         "takeaways": { "type": "integer" },
         "firstDowns": { "type": "integer" },
-        "totalPlays": { "type": "integer" },
+        "ypp": { "type": "number" },
         "rushingAttempts": { "type": "integer" },
         "rushingTds": { "type": "integer" },
         "completions": { "type": "integer" },

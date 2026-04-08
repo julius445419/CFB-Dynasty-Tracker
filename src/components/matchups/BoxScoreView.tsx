@@ -83,7 +83,7 @@ export const BoxScoreView: React.FC<BoxScoreViewProps> = ({ game, homeTeam, away
     { label: 'Completions', away: awayStats.completions || 0, home: homeStats.completions || 0 },
     { label: 'Passing Att', away: awayStats.passingAttempts || 0, home: homeStats.passingAttempts || 0 },
     { label: 'Rushing Att', away: awayStats.rushingAttempts || 0, home: homeStats.rushingAttempts || 0 },
-    { label: 'Total Plays', away: awayStats.totalPlays || 0, home: homeStats.totalPlays || 0 },
+    { label: 'YPP', away: awayStats.ypp || 0, home: homeStats.ypp || 0 },
     { label: 'First Downs', away: awayStats.firstDowns || 0, home: homeStats.firstDowns || 0 },
     { label: '3rd Down Conv', away: `${awayStats.thirdDownMade || 0}/${awayStats.thirdDownAtt || 0}`, home: `${homeStats.thirdDownMade || 0}/${homeStats.thirdDownAtt || 0}`, 
       awayVal: (awayStats.thirdDownAtt || 0) > 0 ? (awayStats.thirdDownMade || 0) / (awayStats.thirdDownAtt || 0) : 0,

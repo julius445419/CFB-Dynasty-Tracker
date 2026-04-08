@@ -159,7 +159,7 @@ export const MyTeam: React.FC = () => {
   return (
     <div className="min-h-screen bg-zinc-950 text-white selection:bg-orange-600/30">
       {/* Header Section */}
-      <header className="px-6 pt-12 pb-8 max-w-2xl mx-auto">
+      <header className="px-6 pt-12 pb-8 max-w-5xl mx-auto">
         {teamId && (
           <button 
             onClick={() => navigate(-1)}
@@ -236,7 +236,7 @@ export const MyTeam: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="px-6 max-w-2xl mx-auto pb-24">
+      <main className="px-6 max-w-5xl mx-auto pb-24">
         <AnimatePresence mode="wait">
           {activeTab === 'Home' && (
             <motion.div
@@ -248,11 +248,15 @@ export const MyTeam: React.FC = () => {
               className="space-y-6"
             >
               {/* Next Game & Recent Results */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {games.find(g => g.status === 'scheduled') && opponent && (
-                  <NextGameWidget game={games.find(g => g.status === 'scheduled')!} team={targetTeam} opponent={opponent} />
+                  <div className="w-full">
+                    <NextGameWidget game={games.find(g => g.status === 'scheduled')!} team={targetTeam} opponent={opponent} />
+                  </div>
                 )}
-                <RecentResultsWidget games={games} team={targetTeam} teams={teams} />
+                <div className="w-full">
+                  <RecentResultsWidget games={games} team={targetTeam} teams={teams} />
+                </div>
               </div>
 
               <CoachCard team={targetTeam} isEditable={!isReadOnly} />

@@ -125,7 +125,7 @@ export interface TeamStats {
   timeOfPossession?: string;
   updatedAt?: any;
   // New granular fields
-  totalPlays?: number;
+  ypp?: number;
   rushingAttempts?: number;
   rushingTds?: number;
   completions?: number;
@@ -176,7 +176,7 @@ export interface TeamGameStats {
   redZoneAttempts: number;
   redZoneTDs: number;
   // New granular fields
-  totalPlays: number;
+  ypp: number;
   rushingAttempts: number;
   rushingTds: number;
   completions: number;
@@ -353,6 +353,17 @@ export interface TeamSeasonStats {
   rushTds: number;
   firstDowns: number;
   fumblesLost: number;
+  // Conversions
+  thirdDownMade?: number;
+  thirdDownAtt?: number;
+  fourthDownConversions?: number;
+  fourthDownAttempts?: number;
+  twoPointConversions?: number;
+  twoPointAttempts?: number;
+  // Red Zone (Offense)
+  redZoneAttempts?: number;
+  redZoneTds?: number;
+  redZoneFgs?: number;
   // Defense (Allowed)
   defPassAttempts: number;
   defPassComps: number;
@@ -364,10 +375,22 @@ export interface TeamSeasonStats {
   defRushTds: number;
   defFirstDownsAllowed: number;
   defFumblesRecovered: number;
+  // Red Zone (Defense Allowed)
+  defRedZoneAttemptsAllowed?: number;
+  defRedZoneTdsAllowed?: number;
+  defRedZoneFgsAllowed?: number;
   // Miscellaneous
   penalties: number;
   penaltyYards: number;
   timeOfPossessionSeconds: number;
+  // Raw Totals (for manual overrides)
+  totalOffense?: number;
+  totalDefense?: number;
+  ypp?: number;
+  defYppAllowed?: number;
+  defSacks?: number;
+  turnovers?: number;
+  takeaways?: number;
   // Offensive Averages
   compPct: number;
   passYpg: number;
@@ -375,13 +398,18 @@ export interface TeamSeasonStats {
   rushYpc: number;
   totalOffYpg: number;
   ppg: number;
+  thirdDownPct?: number;
+  fourthDownPct?: number;
+  redZoneTdPct?: number;
   // Defensive Averages
   defPassYpgAllowed: number;
   defRushYpgAllowed: number;
   defTotalYpgAllowed: number;
   papg: number;
+  defRedZoneTdPctAllowed?: number;
   // Miscellaneous
   turnoverMargin: number;
+  turnoverMarginPg?: number;
   normalizedTopSeconds: number;
   createdAt?: any;
   updatedAt?: any;

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { Trophy, Calendar, Gamepad2, ChevronRight, Pencil, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Trophy, Calendar, Gamepad2, ChevronRight, Pencil, CheckCircle2, Activity, ChevronUp, ChevronDown } from 'lucide-react';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { Game, TeamAssignment, League } from '../../types';
@@ -8,6 +8,7 @@ import { getTeamLogo } from '../../utils/teamAssets';
 import { TeamLogo } from '../common/TeamLogo';
 import { useNavigate } from 'react-router-dom';
 import { ReportScoreModal } from './ReportScoreModal';
+import { useStatLeaders } from '../../hooks/useStatLeaders';
 
 interface CurrentMatchupCardProps {
   leagueId: string;
@@ -23,6 +24,8 @@ export const CurrentMatchupCard: React.FC<CurrentMatchupCardProps> = ({ leagueId
   const [awayTeam, setAwayTeam] = useState<TeamAssignment | null>(null);
   const [loading, setLoading] = useState(true);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const { leaders } = useStatLeaders();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -103,6 +106,51 @@ export const CurrentMatchupCard: React.FC<CurrentMatchupCardProps> = ({ leagueId
   const userTeamData = isUserHome ? homeTeam : awayTeam;
   const isFinal = game.status === 'final';
 
+  const scoutingStats = useMemo(() => {
+    if (!leaders || leaders.length === 0 || !homeTeam || !awayTeam) return null;
+
+    const categories = [
+      { label: 'Points Per Game', field: 'ppg', order: 'desc' },
+      { label: 'Total Offense', field: 'totalOffYpg', order: 'desc' },
+      { label: 'Passing YPG', field: 'passYpg', order: 'desc' },
+      { label: 'Rushing YPG', field: 'rushYpg', order: 'desc' },
+      { label: 'Points Allowed', field: 'papg', order: 'asc' },
+      { label: 'Total Defense', field: 'defTotalYpgAllowed', order: 'asc' },
+      { label: 'Pass Def YPG', field: 'defPassYpgAllowed', order: 'asc' },
+      { label: 'Rush Def YPG', field: 'defRushYpgAllowed', order: 'asc' },
+    ];
+
+    return categories.map(cat => {
+      const sorted = [...leaders].sort((a, b) => {
+        const valA = (a as any)[cat.field] || 0;
+        const valB = (b as any)[cat.field] || 0;
+        return cat.order === 'desc' ? valB - valA : valA - valB;
+      });
+
+      const getTeamRank = (tid: string) => {
+        let rank = 1;
+        for (let i = 0; i < sorted.length; i++) {
+          const val = (sorted[i] as any)[cat.field] || 0;
+          if (i > 0 && val !== ((sorted[i - 1] as any)[cat.field] || 0)) {
+            rank = i + 1;
+          }
+          if (sorted[i].teamId === tid) return { rank, val };
+        }
+        return { rank: 'NR', val: 0 };
+      };
+
+      const teamA = getTeamRank(homeTeam.id);
+      const teamB = getTeamRank(awayTeam.id);
+
+      return {
+        label: cat.label,
+        teamA,
+        teamB,
+        better: cat.order === 'desc' ? (teamA.val > teamB.val ? 'A' : 'B') : (teamA.val < teamB.val ? 'A' : 'B')
+      };
+    });
+  }, [leaders, homeTeam?.id, awayTeam?.id]);
+
   return (
     <>
       <motion.div
@@ -182,6 +230,59 @@ export const CurrentMatchupCard: React.FC<CurrentMatchupCardProps> = ({ leagueId
           </div>
 
           <div className="pt-4 flex flex-col gap-3">
+            {!isFinal && (
+              <>
+                <button 
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="w-full py-3 bg-zinc-950/50 hover:bg-zinc-950 rounded-xl flex items-center justify-center gap-2 transition-colors group border border-zinc-800/50"
+                >
+                  <Activity size={14} className="text-orange-500 group-hover:scale-110 transition-transform" />
+                  <span className="text-[10px] font-black text-white uppercase tracking-widest">Scouting Report</span>
+                  {isExpanded ? <ChevronUp size={14} className="text-zinc-500" /> : <ChevronDown size={14} className="text-zinc-500" />}
+                </button>
+
+                <AnimatePresence>
+                  {isExpanded && scoutingStats && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="py-4 space-y-3 bg-zinc-950/30 rounded-xl border border-zinc-800/30 px-4 mt-1">
+                        {scoutingStats.map((stat, idx) => (
+                          <div key={idx} className="grid grid-cols-5 items-center gap-2">
+                            {/* Home Team Stat */}
+                            <div className="col-span-2 flex items-center justify-end gap-2">
+                              <span className="text-[9px] font-black text-zinc-600">#{stat.teamA.rank}</span>
+                              <span className={`text-xs font-black ${stat.better === 'A' ? 'text-orange-500' : 'text-zinc-400'}`}>
+                                {stat.teamA.val.toFixed(1)}
+                              </span>
+                            </div>
+
+                            {/* Label */}
+                            <div className="text-center px-1">
+                              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-tighter">
+                                {stat.label}
+                              </span>
+                            </div>
+
+                            {/* Away Team Stat */}
+                            <div className="col-span-2 flex items-center justify-start gap-2">
+                              <span className={`text-xs font-black ${stat.better === 'B' ? 'text-orange-500' : 'text-zinc-400'}`}>
+                                {stat.teamB.val.toFixed(1)}
+                              </span>
+                              <span className="text-[9px] font-black text-zinc-600">#{stat.teamB.rank}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </>
+            )}
+
             {!isFinal ? (
               <button 
                 onClick={() => setIsReportModalOpen(true)}

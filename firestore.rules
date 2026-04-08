@@ -23,7 +23,7 @@ service cloud.firestore {
     // Fields: name (string), pos (string), year (string), ovr (int), teamId (string), hometown (string)
     //
     // Collection: teamStats
-    // Fields: gameId (string), teamId (string), score (int), totalYards (int), passingYards (int), rushingYards (int), turnovers (int), firstDowns (int), totalPlays (int), rushingAttempts (int), rushingTds (int), completions (int), passingAttempts (int), passingTds (int), fumblesLost (int), interceptionsThrown (int), penalties (int), penaltyYards (int), timeOfPossession (string)
+    // Fields: gameId (string), teamId (string), score (int), totalYards (int), passingYards (int), rushingYards (int), turnovers (int), firstDowns (int), ypp (float), rushingAttempts (int), rushingTds (int), completions (int), passingAttempts (int), passingTds (int), fumblesLost (int), interceptionsThrown (int), penalties (int), penaltyYards (int), timeOfPossession (string)
     //
     // Collection: playerStats
     // Fields: gameId (string), playerId (string), teamId (string), passYds (int), passTDs (int), etc.
@@ -52,9 +52,8 @@ service cloud.firestore {
     function isLeagueOwner(leagueId) {
       return isAdmin() || (isAuthenticated() && (
         get(/databases/$(database)/documents/leagues/$(leagueId)).data.ownerId == request.auth.uid ||
-        (request.auth.uid in get(/databases/$(database)/documents/leagues/$(leagueId)).data.get('commissioners', [])) ||
         (exists(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)).data.role.lower() in ['owner', 'commissioner', 'admin'])
+         get(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)).data.role in ['Owner', 'Commissioner', 'Admin', 'owner', 'commissioner', 'admin'])
       ));
     }
 
@@ -93,9 +92,6 @@ service cloud.firestore {
     function isValidTeamStats(data) {
       return data.teamId is string &&
              data.seasonYear is int &&
-             (!('gamesPlayed' in data) || data.gamesPlayed is int) &&
-             (!('pointsScored' in data) || data.pointsScored is int) &&
-             (!('pointsAllowed' in data) || data.pointsAllowed is int) &&
              (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, 
@@ -11,7 +11,9 @@ import {
   AlertCircle,
   Activity,
   RefreshCw,
-  Loader2
+  Loader2,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { 
   collection, 
@@ -36,6 +38,7 @@ import { UnifiedStatEntryModal } from '../components/modals/UnifiedStatEntryModa
 import AddMatchupModal from '../components/modals/AddMatchupModal';
 import { BoxScoreView } from '../components/matchups/BoxScoreView';
 import { updateTeamStats } from '../services/statsService';
+import { useStatLeaders } from '../hooks/useStatLeaders';
 
 const MatchupHub: React.FC = () => {
   const { currentLeagueId, leagueInfo, userRole, userTeam, loading: leagueLoading } = useLeague();
@@ -755,8 +758,55 @@ interface GameCardProps {
 
 const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, userId }) => {
   const [showBoxScore, setShowBoxScore] = useState(false);
+  const [showScoutingReport, setShowScoutingReport] = useState(false);
+  const { leaders } = useStatLeaders();
   const homeTeam = teams[game.homeTeamId];
   const awayTeam = teams[game.awayTeamId];
+
+  const scoutingStats = useMemo(() => {
+    if (!leaders || leaders.length === 0 || !homeTeam || !awayTeam) return null;
+
+    const categories = [
+      { label: 'Points Per Game', field: 'ppg', order: 'desc' },
+      { label: 'Total Offense', field: 'totalOffYpg', order: 'desc' },
+      { label: 'Passing YPG', field: 'passYpg', order: 'desc' },
+      { label: 'Rushing YPG', field: 'rushYpg', order: 'desc' },
+      { label: 'Points Allowed', field: 'papg', order: 'asc' },
+      { label: 'Total Defense', field: 'defTotalYpgAllowed', order: 'asc' },
+      { label: 'Pass Def YPG', field: 'defPassYpgAllowed', order: 'asc' },
+      { label: 'Rush Def YPG', field: 'defRushYpgAllowed', order: 'asc' },
+    ];
+
+    return categories.map(cat => {
+      const sorted = [...leaders].sort((a, b) => {
+        const valA = (a as any)[cat.field] || 0;
+        const valB = (b as any)[cat.field] || 0;
+        return cat.order === 'desc' ? valB - valA : valA - valB;
+      });
+
+      const getTeamRank = (tid: string) => {
+        let rank = 1;
+        for (let i = 0; i < sorted.length; i++) {
+          const val = (sorted[i] as any)[cat.field] || 0;
+          if (i > 0 && val !== ((sorted[i - 1] as any)[cat.field] || 0)) {
+            rank = i + 1;
+          }
+          if (sorted[i].teamId === tid) return { rank, val };
+        }
+        return { rank: 'NR', val: 0 };
+      };
+
+      const teamA = getTeamRank(homeTeam.id);
+      const teamB = getTeamRank(awayTeam.id);
+
+      return {
+        label: cat.label,
+        teamA,
+        teamB,
+        better: cat.order === 'desc' ? (teamA.val > teamB.val ? 'A' : 'B') : (teamA.val < teamB.val ? 'A' : 'B')
+      };
+    });
+  }, [leaders, homeTeam?.id, awayTeam?.id]);
 
   if (!homeTeam || !awayTeam) return null;
 
@@ -854,6 +904,59 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, 
           </div>
         </div>
       </div>
+
+      {!isFinal && (
+        <div className="mt-4 pt-4 border-t border-zinc-800/50">
+          <button
+            onClick={() => setShowScoutingReport(!showScoutingReport)}
+            className="flex items-center gap-2 text-zinc-500 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all"
+          >
+            <Activity className={`w-3.5 h-3.5 transition-transform ${showScoutingReport ? 'rotate-180' : ''}`} />
+            {showScoutingReport ? 'Hide Scouting Report' : 'View Scouting Report'}
+            {showScoutingReport ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+
+          <AnimatePresence>
+            {showScoutingReport && scoutingStats && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="py-4 space-y-3 bg-zinc-950/30 rounded-2xl border border-zinc-800/30 px-4 mt-3">
+                  {scoutingStats.map((stat, idx) => (
+                    <div key={idx} className="grid grid-cols-5 items-center gap-2">
+                      {/* Away Team Stat (Team B in NextGameWidget logic, but here it's away) */}
+                      <div className="col-span-2 flex items-center justify-end gap-2">
+                        <span className="text-[9px] font-black text-zinc-600">#{stat.teamB.rank}</span>
+                        <span className={`text-xs font-black ${stat.better === 'B' ? 'text-orange-500' : 'text-zinc-400'}`}>
+                          {stat.teamB.val.toFixed(1)}
+                        </span>
+                      </div>
+
+                      {/* Label */}
+                      <div className="text-center px-1">
+                        <span className="text-[8px] font-black text-zinc-500 uppercase tracking-tighter">
+                          {stat.label}
+                        </span>
+                      </div>
+
+                      {/* Home Team Stat (Team A in NextGameWidget logic, but here it's home) */}
+                      <div className="col-span-2 flex items-center justify-start gap-2">
+                        <span className={`text-xs font-black ${stat.better === 'A' ? 'text-orange-500' : 'text-zinc-400'}`}>
+                          {stat.teamA.val.toFixed(1)}
+                        </span>
+                        <span className="text-[9px] font-black text-zinc-600">#{stat.teamA.rank}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {isFinal && (
         <div className="mt-6 pt-6 border-t border-zinc-800/50 space-y-4">

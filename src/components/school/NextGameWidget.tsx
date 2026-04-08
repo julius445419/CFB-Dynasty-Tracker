@@ -145,8 +145,8 @@ export const NextGameWidget: React.FC<NextGameWidgetProps> = ({ game, team, oppo
                   </div>
 
                   {/* Label */}
-                  <div className="text-center">
-                    <span className="text-[8px] font-black text-zinc-500 uppercase tracking-tighter whitespace-nowrap">
+                  <div className="text-center px-1">
+                    <span className="text-[8px] font-black text-zinc-500 uppercase tracking-tighter">
                       {stat.label}
                     </span>
                   </div>

@@ -43,7 +43,7 @@ export const UnifiedStatEntryModal: React.FC<UnifiedStatEntryModalProps> = ({
   const defaultStats: TeamStats = {
     passYards: 0, rushYards: 0, turnovers: 0, takeaways: 0,
     firstDowns: 0, thirdDownMade: 0, thirdDownAtt: 0,
-    totalPlays: 0, rushingAttempts: 0, rushingTds: 0, completions: 0,
+    ypp: 0, rushingAttempts: 0, rushingTds: 0, completions: 0,
     passingAttempts: 0, passingTds: 0, fourthDownConversions: 0,
     fourthDownAttempts: 0, twoPointConversions: 0, twoPointAttempts: 0,
     fumblesLost: 0, interceptionsThrown: 0, penalties: 0, penaltyYards: 0,
@@ -95,11 +95,6 @@ export const UnifiedStatEntryModal: React.FC<UnifiedStatEntryModalProps> = ({
     setter(prev => {
       const numericValue = field !== 'timeOfPossession' ? Number(value) : value;
       const updated = { ...prev, [field]: numericValue };
-      
-      // Auto-calculate Total Plays
-      if (field === 'rushingAttempts' || field === 'passingAttempts') {
-        updated.totalPlays = (Number(updated.rushingAttempts) || 0) + (Number(updated.passingAttempts) || 0);
-      }
       
       // Auto-calculate Turnovers
       if (field === 'fumblesLost' || field === 'interceptionsThrown') {
@@ -197,7 +192,7 @@ export const UnifiedStatEntryModal: React.FC<UnifiedStatEntryModalProps> = ({
 
   const teamStatFields: { label: string; field: keyof TeamStats; type?: 'number' | 'text' }[] = [
     { label: 'First Downs', field: 'firstDowns', type: 'number' },
-    { label: 'Total Plays', field: 'totalPlays', type: 'number' },
+    { label: 'YPP', field: 'ypp', type: 'number' },
     { label: 'Rushing Attempts', field: 'rushingAttempts', type: 'number' },
     { label: 'Rushing Yards', field: 'rushYards', type: 'number' },
     { label: 'Rushing TDs', field: 'rushingTds', type: 'number' },
@@ -292,7 +287,6 @@ export const UnifiedStatEntryModal: React.FC<UnifiedStatEntryModalProps> = ({
                               inputMode={s.type === 'number' ? 'numeric' : undefined}
                               value={s.field === 'timeOfPossession' ? awayStats[s.field] : (awayStats[s.field] || '')}
                               onChange={(e) => s.field === 'timeOfPossession' ? handleTOPChange('away', e.target.value) : updateStats('away', s.field, e.target.value)}
-                              readOnly={s.field === 'totalPlays'}
                               className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-center text-white focus:border-orange-500"
                             />
                             <input
@@ -300,7 +294,6 @@ export const UnifiedStatEntryModal: React.FC<UnifiedStatEntryModalProps> = ({
                               inputMode={s.type === 'number' ? 'numeric' : undefined}
                               value={s.field === 'timeOfPossession' ? homeStats[s.field] : (homeStats[s.field] || '')}
                               onChange={(e) => s.field === 'timeOfPossession' ? handleTOPChange('home', e.target.value) : updateStats('home', s.field, e.target.value)}
-                              readOnly={s.field === 'totalPlays'}
                               className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-center text-white focus:border-orange-500"
                             />
                           </div>
@@ -319,7 +312,6 @@ export const UnifiedStatEntryModal: React.FC<UnifiedStatEntryModalProps> = ({
                                 inputMode={s.type === 'number' ? 'numeric' : undefined}
                                 value={s.field === 'timeOfPossession' ? awayStats[s.field] : (awayStats[s.field] || '')}
                                 onChange={(e) => s.field === 'timeOfPossession' ? handleTOPChange('away', e.target.value) : updateStats('away', s.field, e.target.value)}
-                                readOnly={s.field === 'totalPlays'}
                                 className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white focus:border-orange-500"
                               />
                             </div>
@@ -336,7 +328,6 @@ export const UnifiedStatEntryModal: React.FC<UnifiedStatEntryModalProps> = ({
                                 inputMode={s.type === 'number' ? 'numeric' : undefined}
                                 value={s.field === 'timeOfPossession' ? homeStats[s.field] : (homeStats[s.field] || '')}
                                 onChange={(e) => s.field === 'timeOfPossession' ? handleTOPChange('home', e.target.value) : updateStats('home', s.field, e.target.value)}
-                                readOnly={s.field === 'totalPlays'}
                                 className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white focus:border-orange-500"
                               />
                             </div>

@@ -25,6 +25,7 @@ import MatchupHub from './pages/MatchupHub';
 import ScheduleManagement from './pages/admin/ScheduleManagement';
 import ManageCoaches from './pages/admin/ManageCoaches';
 import { ManagePolls } from './pages/admin/ManagePolls';
+import { BulkStatEntry } from './pages/admin/BulkStatEntry';
 import { Programs } from './pages/Programs';
 import { Standings } from './pages/Standings';
 import { StatLeaders } from './pages/StatLeaders';
@@ -34,6 +35,7 @@ import { Polls } from './pages/Polls';
 import { MyBoard } from './pages/MyBoard';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleGate } from './components/RoleGate';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // --- Placeholder Components ---
 
@@ -46,83 +48,90 @@ const PlaceholderPage = ({ title }: { title: string }) => (
 
 export default function App() {
   return (
-    <AuthProvider>
-      <LeagueProvider>
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/portal" element={
-              <ProtectedRoute>
-                <Portal />
-              </ProtectedRoute>
-            } />
-            <Route path="/join-league" element={
-              <ProtectedRoute>
-                <JoinLeague />
-              </ProtectedRoute>
-            } />
-            <Route path="/request-team" element={
-              <ProtectedRoute>
-                <RequestTeam />
-              </ProtectedRoute>
-            } />
-            <Route path="/" element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }>
-              <Route index element={<Dashboard />} />
-              <Route path="team" element={<MyTeam />} />
-              <Route path="team/recruiting" element={<MyBoard />} />
-              <Route path="teams/:teamId" element={<MyTeam />} />
-              <Route path="league" element={<LeagueHub />} />
-              <Route path="programs" element={<Programs />} />
-              <Route path="standings" element={<Standings />} />
-              <Route path="leaders" element={<StatLeaders />} />
-              <Route path="matchups" element={<MatchupHub />} />
-              <Route path="polls" element={<Polls />} />
-              <Route path="school/:schoolId" element={<SchoolHome />} />
-              <Route path="admin" element={
-                <RoleGate allowedRoles={['Owner', 'Commissioner']}>
-                  <AdminDashboard />
-                </RoleGate>
+    <ErrorBoundary>
+      <AuthProvider>
+        <LeagueProvider>
+          <Router>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/portal" element={
+                <ProtectedRoute>
+                  <Portal />
+                </ProtectedRoute>
               } />
-              <Route path="admin/settings" element={<LeagueSettings />} />
-              <Route path="admin/members" element={
-                <RoleGate allowedRoles={['Owner', 'Commissioner']}>
-                  <MemberManagement />
-                </RoleGate>
+              <Route path="/join-league" element={
+                <ProtectedRoute>
+                  <JoinLeague />
+                </ProtectedRoute>
               } />
-              <Route path="admin/shadow-coaches" element={
-                <RoleGate allowedRoles={['Owner', 'Commissioner']}>
-                  <CreateShadowCoach />
-                </RoleGate>
+              <Route path="/request-team" element={
+                <ProtectedRoute>
+                  <RequestTeam />
+                </ProtectedRoute>
               } />
-              <Route path="admin/requests" element={
-                <RoleGate allowedRoles={['Owner', 'Commissioner']}>
-                  <PendingRequests />
-                </RoleGate>
-              } />
-              <Route path="admin/coaches" element={
-                <RoleGate allowedRoles={['Owner', 'Commissioner']}>
-                  <ManageCoaches />
-                </RoleGate>
-              } />
-              <Route path="admin/schedule" element={
-                <RoleGate allowedRoles={['Owner', 'Commissioner']}>
-                  <ScheduleManagement />
-                </RoleGate>
-              } />
-              <Route path="admin/polls" element={
-                <RoleGate allowedRoles={['Owner', 'Commissioner']}>
-                  <ManagePolls />
-                </RoleGate>
-              } />
-              <Route path="*" element={<PlaceholderPage title="Not Found" />} />
-            </Route>
-          </Routes>
-        </Router>
-      </LeagueProvider>
-    </AuthProvider>
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }>
+                <Route index element={<Dashboard />} />
+                <Route path="team" element={<MyTeam />} />
+                <Route path="team/recruiting" element={<MyBoard />} />
+                <Route path="teams/:teamId" element={<MyTeam />} />
+                <Route path="league" element={<LeagueHub />} />
+                <Route path="programs" element={<Programs />} />
+                <Route path="standings" element={<Standings />} />
+                <Route path="leaders" element={<StatLeaders />} />
+                <Route path="matchups" element={<MatchupHub />} />
+                <Route path="polls" element={<Polls />} />
+                <Route path="school/:schoolId" element={<SchoolHome />} />
+                <Route path="admin" element={
+                  <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                    <AdminDashboard />
+                  </RoleGate>
+                } />
+                <Route path="admin/settings" element={<LeagueSettings />} />
+                <Route path="admin/members" element={
+                  <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                    <MemberManagement />
+                  </RoleGate>
+                } />
+                <Route path="admin/shadow-coaches" element={
+                  <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                    <CreateShadowCoach />
+                  </RoleGate>
+                } />
+                <Route path="admin/requests" element={
+                  <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                    <PendingRequests />
+                  </RoleGate>
+                } />
+                <Route path="admin/coaches" element={
+                  <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                    <ManageCoaches />
+                  </RoleGate>
+                } />
+                <Route path="admin/schedule" element={
+                  <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                    <ScheduleManagement />
+                  </RoleGate>
+                } />
+                <Route path="admin/polls" element={
+                  <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                    <ManagePolls />
+                  </RoleGate>
+                } />
+                <Route path="admin/bulk-stats" element={
+                  <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                    <BulkStatEntry />
+                  </RoleGate>
+                } />
+                <Route path="*" element={<PlaceholderPage title="Not Found" />} />
+              </Route>
+            </Routes>
+          </Router>
+        </LeagueProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
