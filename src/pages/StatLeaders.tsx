@@ -7,227 +7,478 @@ import {
   Wind, 
   Trophy, 
   ChevronRight, 
-  Search,
   Filter,
   Activity,
-  ArrowUpRight,
-  ArrowDownRight
+  User,
+  Target,
+  Crosshair,
+  Sword
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useStatLeaders, TeamLeaderStats } from '../hooks/useStatLeaders';
+import { usePlayerLeaders, PlayerStatCategory } from '../hooks/usePlayerLeaders';
 import { useLeague } from '../context/LeagueContext';
-import { getTeamLogo } from '../utils/teamAssets';
+import { TeamLogo } from '../components/common/TeamLogo';
 
-type StatCategory = 'scoring' | 'totalOffense' | 'passing' | 'rushing' | 'defense' | 'turnoverMargin';
+type ViewType = 'players' | 'teams';
+type UnitType = 'offense' | 'defense' | 'misc';
 
-interface CategoryConfig {
-  id: StatCategory;
+interface StatCategory {
+  id: string;
   label: string;
-  icon: any;
+  field: string;
   unit: string;
   sortOrder: 'asc' | 'desc';
 }
 
-const CATEGORIES: CategoryConfig[] = [
-  { id: 'totalOffense', label: 'Total Offense', icon: Activity, unit: 'YPG', sortOrder: 'desc' },
-  { id: 'scoring', label: 'Scoring', icon: Flame, unit: 'PPG', sortOrder: 'desc' },
-  { id: 'passing', label: 'Passing', icon: Wind, unit: 'YPG', sortOrder: 'desc' },
-  { id: 'rushing', label: 'Rushing', icon: Zap, unit: 'YPG', sortOrder: 'desc' },
-  { id: 'defense', label: 'Total Defense', icon: Shield, unit: 'YPG', sortOrder: 'asc' },
-  { id: 'turnoverMargin', label: 'TO Margin', icon: Trophy, unit: 'AVG', sortOrder: 'desc' },
-];
+const TEAM_CATEGORIES: Record<UnitType, StatCategory[]> = {
+  offense: [
+    { id: 'total', label: 'Total Offense', field: 'totalOffYpg', unit: 'YPG', sortOrder: 'desc' },
+    { id: 'scoring', label: 'Scoring', field: 'ppg', unit: 'PPG', sortOrder: 'desc' },
+    { id: 'passing', label: 'Passing', field: 'passYpg', unit: 'YPG', sortOrder: 'desc' },
+    { id: 'rushing', label: 'Rushing', field: 'rushYpg', unit: 'YPG', sortOrder: 'desc' },
+  ],
+  defense: [
+    { id: 'total', label: 'Total Defense', field: 'defTotalYpgAllowed', unit: 'YPG', sortOrder: 'asc' },
+    { id: 'scoring', label: 'Scoring Defense', field: 'papg', unit: 'PPG', sortOrder: 'asc' },
+    { id: 'passing', label: 'Pass Defense', field: 'defPassYpgAllowed', unit: 'YPG', sortOrder: 'asc' },
+    { id: 'rushing', label: 'Rush Defense', field: 'defRushYpgAllowed', unit: 'YPG', sortOrder: 'asc' },
+  ],
+  misc: [
+    { id: 'turnover', label: 'Turnover Margin', field: 'turnoverMargin', unit: 'DIFF', sortOrder: 'desc' },
+    { id: 'penalties', label: 'Penalty Yards', field: 'penaltyYards', unit: 'YDS', sortOrder: 'asc' },
+  ]
+};
+
+const PLAYER_CATEGORIES: Record<UnitType, StatCategory[]> = {
+  offense: [
+    { id: 'passing', label: 'Passing Yards', field: 'seasonPassYds', unit: 'YDS', sortOrder: 'desc' },
+    { id: 'passing_td', label: 'Passing TDs', field: 'seasonPassTDs', unit: 'TD', sortOrder: 'desc' },
+    { id: 'rushing', label: 'Rushing Yards', field: 'seasonRushYds', unit: 'YDS', sortOrder: 'desc' },
+    { id: 'rushing_td', label: 'Rushing TDs', field: 'seasonRushTDs', unit: 'TD', sortOrder: 'desc' },
+    { id: 'receiving', label: 'Receiving Yards', field: 'seasonRecYds', unit: 'YDS', sortOrder: 'desc' },
+    { id: 'receiving_td', label: 'Receiving TDs', field: 'seasonRecTDs', unit: 'TD', sortOrder: 'desc' },
+  ],
+  defense: [
+    { id: 'tackles', label: 'Tackles', field: 'seasonTackles', unit: 'TKL', sortOrder: 'desc' },
+    { id: 'sacks', label: 'Sacks', field: 'seasonSacks', unit: 'SCK', sortOrder: 'desc' },
+    { id: 'ints', label: 'Interceptions', field: 'seasonInts', unit: 'INT', sortOrder: 'desc' },
+  ],
+  misc: [
+    { id: 'punting', label: 'Punting', field: 'seasonPuntYds', unit: 'YDS', sortOrder: 'desc' }, // Placeholder
+  ]
+};
+
+interface ColumnConfig {
+  header: string;
+  key: string;
+  align?: 'left' | 'center' | 'right';
+  format?: (val: any, row: TeamLeaderStats) => React.ReactNode;
+}
+
+const TEAM_COLUMN_CONFIGS: Record<string, Record<string, ColumnConfig[]>> = {
+  offense: {
+    passing: [
+      { header: 'Rank', key: 'rank' },
+      { header: 'Team', key: 'team' },
+      { header: 'G', key: 'gamesPlayed', align: 'center' },
+      { header: 'C/ATT', key: 'catt', align: 'center', format: (_, row) => `${row.passComps}/${row.passAttempts}` },
+      { header: 'Comp%', key: 'compPct', align: 'right', format: (val) => `${val.toFixed(1)}%` },
+      { header: 'Yds', key: 'passYards', align: 'right' },
+      { header: 'YPG', key: 'passYpg', align: 'right', format: (val) => val.toFixed(1) },
+      { header: 'TD', key: 'passTds', align: 'right' },
+      { header: 'INT', key: 'intsThrown', align: 'right' },
+    ],
+    rushing: [
+      { header: 'Rank', key: 'rank' },
+      { header: 'Team', key: 'team' },
+      { header: 'G', key: 'gamesPlayed', align: 'center' },
+      { header: 'Att', key: 'rushAttempts', align: 'center' },
+      { header: 'Yds', key: 'rushYards', align: 'right' },
+      { header: 'Avg', key: 'rushYpc', align: 'right', format: (val) => val.toFixed(1) },
+      { header: 'YPG', key: 'rushYpg', align: 'right', format: (val) => val.toFixed(1) },
+      { header: 'TD', key: 'rushTds', align: 'right' },
+    ],
+    total: [
+      { header: 'Rank', key: 'rank' },
+      { header: 'Team', key: 'team' },
+      { header: 'G', key: 'gamesPlayed', align: 'center' },
+      { header: 'Plays', key: 'totalPlays', align: 'center', format: (_, row) => (row.passAttempts + row.rushAttempts) },
+      { header: 'Rush Yds', key: 'rushYards', align: 'right' },
+      { header: 'Pass Yds', key: 'passYards', align: 'right' },
+      { header: 'Total Yds', key: 'totalYards', align: 'right', format: (_, row) => (row.passYards + row.rushYards) },
+      { header: 'YPG', key: 'totalOffYpg', align: 'right', format: (val) => val.toFixed(1) },
+    ],
+    scoring: [
+      { header: 'Rank', key: 'rank' },
+      { header: 'Team', key: 'team' },
+      { header: 'G', key: 'gamesPlayed', align: 'center' },
+      { header: 'Total Pts', key: 'pointsScored', align: 'right' },
+      { header: 'PPG', key: 'ppg', align: 'right', format: (val) => val.toFixed(1) },
+    ],
+  },
+  defense: {
+    passing: [
+      { header: 'Rank', key: 'rank' },
+      { header: 'Team', key: 'team' },
+      { header: 'G', key: 'gamesPlayed', align: 'center' },
+      { header: 'C/ATT', key: 'catt', align: 'center', format: (_, row) => `${row.defPassComps}/${row.defPassAttempts}` },
+      { header: 'Comp%', key: 'compPct', align: 'right', format: (_, row) => `${((row.defPassComps / (row.defPassAttempts || 1)) * 100).toFixed(1)}%` },
+      { header: 'Yds', key: 'defPassYards', align: 'right' },
+      { header: 'YPG', key: 'defPassYpgAllowed', align: 'right', format: (val) => val.toFixed(1) },
+      { header: 'TD', key: 'defPassTds', align: 'right' },
+      { header: 'INT', key: 'defIntsCaught', align: 'right' },
+    ],
+    rushing: [
+      { header: 'Rank', key: 'rank' },
+      { header: 'Team', key: 'team' },
+      { header: 'G', key: 'gamesPlayed', align: 'center' },
+      { header: 'Att', key: 'defRushAttempts', align: 'center' },
+      { header: 'Yds', key: 'defRushYards', align: 'right' },
+      { header: 'Avg', key: 'rushAvg', align: 'right', format: (_, row) => (row.defRushYards / (row.defRushAttempts || 1)).toFixed(1) },
+      { header: 'YPG', key: 'defRushYpgAllowed', align: 'right', format: (val) => val.toFixed(1) },
+      { header: 'TD', key: 'defRushTds', align: 'right' },
+    ],
+    total: [
+      { header: 'Rank', key: 'rank' },
+      { header: 'Team', key: 'team' },
+      { header: 'G', key: 'gamesPlayed', align: 'center' },
+      { header: 'Plays', key: 'totalPlays', align: 'center', format: (_, row) => (row.defPassAttempts + row.defRushAttempts) },
+      { header: 'Rush Yds', key: 'defRushYards', align: 'right' },
+      { header: 'Pass Yds', key: 'defPassYards', align: 'right' },
+      { header: 'Total Yds', key: 'totalYards', align: 'right', format: (_, row) => (row.defPassYards + row.defRushYards) },
+      { header: 'YPG', key: 'defTotalYpgAllowed', align: 'right', format: (val) => val.toFixed(1) },
+    ],
+    scoring: [
+      { header: 'Rank', key: 'rank' },
+      { header: 'Team', key: 'team' },
+      { header: 'G', key: 'gamesPlayed', align: 'center' },
+      { header: 'Total Pts', key: 'pointsAllowed', align: 'right' },
+      { header: 'PPG', key: 'papg', align: 'right', format: (val) => val.toFixed(1) },
+    ],
+  },
+  misc: {
+    turnover: [
+      { header: 'Rank', key: 'rank' },
+      { header: 'Team', key: 'team' },
+      { header: 'G', key: 'gamesPlayed', align: 'center' },
+      { header: 'Takeaways', key: 'takeaways', align: 'center', format: (_, row) => (row.defIntsCaught + row.defFumblesRecovered) },
+      { header: 'Giveaways', key: 'giveaways', align: 'center', format: (_, row) => (row.intsThrown + row.fumblesLost) },
+      { header: 'Margin', key: 'turnoverMargin', align: 'right', format: (val) => (val > 0 ? `+${val}` : val) },
+    ],
+    penalties: [
+      { header: 'Rank', key: 'rank' },
+      { header: 'Team', key: 'team' },
+      { header: 'G', key: 'gamesPlayed', align: 'center' },
+      { header: 'Penalties', key: 'penalties', align: 'center' },
+      { header: 'Yds', key: 'penaltyYards', align: 'right' },
+      { header: 'Yds/G', key: 'penaltyYpg', align: 'right', format: (_, row) => (row.penaltyYards / (row.gamesPlayed || 1)).toFixed(1) },
+    ]
+  }
+};
 
 export const StatLeaders: React.FC = () => {
-  const { leaders, loading } = useStatLeaders();
   const { userTeam } = useLeague();
-  const [activeCategory, setActiveCategory] = useState<StatCategory>('totalOffense');
+  const [viewType, setViewType] = useState<ViewType>('teams');
+  const [activeUnit, setActiveUnit] = useState<UnitType>('offense');
+  const [activeCategory, setActiveCategory] = useState<string>('total');
   const [minGames, setMinGames] = useState(1);
 
-  const sortedLeaders = useMemo(() => {
-    const filtered = leaders.filter(l => l.gamesPlayed >= minGames);
-    const config = CATEGORIES.find(c => c.id === activeCategory)!;
+  const currentCategories = viewType === 'teams' ? TEAM_CATEGORIES : PLAYER_CATEGORIES;
+
+  const currentCategoryConfig = useMemo(() => {
+    const unitCats = currentCategories[activeUnit] || currentCategories['offense'];
+    return unitCats.find(c => c.id === activeCategory) || unitCats[0];
+  }, [viewType, activeUnit, activeCategory, currentCategories]);
+
+  const { leaders: teamLeaders, loading: teamLoading } = useStatLeaders();
+  const { leaders: playerLeaders, loading: playerLoading } = usePlayerLeaders(
+    (viewType === 'players' ? currentCategoryConfig.field : 'seasonPassYds') as PlayerStatCategory
+  );
+
+  const teamColumns = useMemo(() => {
+    return TEAM_COLUMN_CONFIGS[activeUnit]?.[activeCategory] || [];
+  }, [activeUnit, activeCategory]);
+
+  // Reset category when unit or viewType changes
+  const handleViewTypeChange = (type: ViewType) => {
+    setViewType(type);
+    const newUnit = 'offense';
+    setActiveUnit(newUnit);
+    const cats = type === 'teams' ? TEAM_CATEGORIES : PLAYER_CATEGORIES;
+    setActiveCategory(cats[newUnit][0].id);
+  };
+
+  const handleUnitChange = (unit: UnitType) => {
+    setActiveUnit(unit);
+    const cats = viewType === 'teams' ? TEAM_CATEGORIES : PLAYER_CATEGORIES;
+    const unitCats = cats[unit] || cats['offense'];
+    setActiveCategory(unitCats[0].id);
+  };
+
+  const sortedTeamLeaders = useMemo(() => {
+    const filtered = teamLeaders.filter(l => l.gamesPlayed >= minGames);
+    const field = currentCategoryConfig.field;
     
     return [...filtered].sort((a, b) => {
-      let valA = 0;
-      let valB = 0;
-
-      switch (activeCategory) {
-        case 'scoring': valA = a.ppg; valB = b.ppg; break;
-        case 'totalOffense': valA = a.ypg; valB = b.ypg; break;
-        case 'passing': valA = a.passYpg; valB = b.passYpg; break;
-        case 'rushing': valA = a.rushYpg; valB = b.rushYpg; break;
-        case 'defense': valA = a.defYpg; valB = b.defYpg; break;
-        case 'turnoverMargin': valA = a.turnoverMargin; valB = b.turnoverMargin; break;
-      }
-
-      return config.sortOrder === 'desc' ? valB - valA : valA - valB;
+      const valA = (a as any)[field] || 0;
+      const valB = (b as any)[field] || 0;
+      return currentCategoryConfig.sortOrder === 'desc' ? valB - valA : valA - valB;
     });
-  }, [leaders, activeCategory, minGames]);
+  }, [teamLeaders, currentCategoryConfig, minGames]);
 
-  const getStatValue = (leader: TeamLeaderStats) => {
-    switch (activeCategory) {
-      case 'scoring': return leader.ppg;
-      case 'totalOffense': return leader.ypg;
-      case 'passing': return leader.passYpg;
-      case 'rushing': return leader.rushYpg;
-      case 'defense': return leader.defYpg;
-      case 'turnoverMargin': return leader.turnoverMargin;
-      default: return 0;
-    }
-  };
-
-  const getRankColor = (index: number) => {
-    if (index === 0) return 'text-yellow-500'; // Gold
-    if (index === 1) return 'text-zinc-400';   // Silver
-    if (index === 2) return 'text-orange-600'; // Bronze
-    return 'text-zinc-600';
-  };
-
-  const getRankBadge = (index: number) => {
-    if (index === 0) return 'bg-yellow-500/10 border-yellow-500/20';
-    if (index === 1) return 'bg-zinc-400/10 border-zinc-400/20';
-    if (index === 2) return 'bg-orange-600/10 border-orange-600/20';
-    return 'bg-zinc-900 border-zinc-800';
-  };
-
-  if (loading) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-600 border-t-transparent" />
-      </div>
-    );
-  }
-
-  const activeConfig = CATEGORIES.find(c => c.id === activeCategory)!;
+  const loading = viewType === 'players' ? playerLoading : teamLoading;
 
   return (
-    <div className="space-y-8 p-6 pb-24">
-      <header className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-black text-white uppercase italic tracking-tight">
-            National <span className="text-orange-600">Leaders</span>
-          </h1>
-          <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5">
-            <Filter size={14} className="text-zinc-500" />
-            <select 
-              value={minGames}
-              onChange={(e) => setMinGames(parseInt(e.target.value))}
-              className="bg-transparent text-[10px] font-black text-white uppercase tracking-widest focus:outline-none"
+    <div className="space-y-6 p-4 pb-24 max-w-5xl mx-auto">
+      <header className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-black text-white uppercase italic tracking-tight flex items-center gap-2">
+              <Trophy className="text-orange-600" size={24} />
+              National <span className="text-orange-600">Leaders</span>
+            </h1>
+            <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Season Statistics Hub</p>
+          </div>
+
+          <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-xl w-fit">
+            <button
+              onClick={() => handleViewTypeChange('players')}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                viewType === 'players' ? 'bg-orange-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
             >
-              <option value={0}>Min GP: 0</option>
-              <option value={1}>Min GP: 1</option>
-              <option value={2}>Min GP: 2</option>
-              <option value={3}>Min GP: 3</option>
-            </select>
+              <User size={12} />
+              Players
+            </button>
+            <button
+              onClick={() => handleViewTypeChange('teams')}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                viewType === 'teams' ? 'bg-orange-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <Activity size={12} />
+              Teams
+            </button>
           </div>
         </div>
-        <p className="text-zinc-500 font-medium">Top performing programs across the league.</p>
       </header>
 
-      {/* Category Switcher */}
+      {/* Level 2: Units */}
+      <div className="flex border-b border-zinc-800">
+        {(['offense', 'defense', 'misc'] as UnitType[]).map((unit) => {
+          const hasCats = !!currentCategories[unit];
+          if (!hasCats) return null;
+          
+          return (
+            <button
+              key={unit}
+              onClick={() => handleUnitChange(unit)}
+              className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 ${
+                activeUnit === unit 
+                  ? 'border-orange-600 text-white' 
+                  : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {unit}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Level 3: Categories */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-        {CATEGORIES.map((cat) => (
+        {(currentCategories[activeUnit] || []).map((cat) => (
           <button
             key={cat.id}
             onClick={() => setActiveCategory(cat.id)}
-            className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all whitespace-nowrap border ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest transition-all whitespace-nowrap border ${
               activeCategory === cat.id
-                ? 'bg-orange-600 border-orange-500 text-white shadow-lg shadow-orange-600/20'
+                ? 'bg-zinc-100 border-white text-zinc-950 shadow-lg'
                 : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700'
             }`}
           >
-            <cat.icon size={14} />
             {cat.label}
           </button>
         ))}
       </div>
 
-      {/* Leaderboard List */}
-      <div className="space-y-3">
-        <AnimatePresence mode="popLayout">
-          {sortedLeaders.length > 0 ? (
-            sortedLeaders.map((leader, index) => {
-              const isUserTeam = userTeam?.name === leader.name;
-              const statValue = getStatValue(leader);
-              
-              return (
-                <motion.div
-                  key={leader.teamId}
-                  layout
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <Link
-                    to={`/teams/${leader.teamId}`}
-                    className={`group flex items-center justify-between p-4 rounded-[2rem] border transition-all ${
-                      isUserTeam 
-                        ? 'bg-orange-600/10 border-orange-600 shadow-lg shadow-orange-600/5' 
-                        : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 backdrop-blur-xl'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      {/* Rank */}
-                      <div className={`w-10 h-10 rounded-xl border flex items-center justify-center font-black italic text-lg ${getRankBadge(index)} ${getRankColor(index)}`}>
-                        {index + 1}
-                      </div>
+      {/* Leaderboard Table */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl">
+        {loading ? (
+          <div className="flex h-64 items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange-600 border-t-transparent" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-zinc-950 border-b border-zinc-800">
+                  {viewType === 'teams' ? (
+                    teamColumns.map((col) => (
+                      <th 
+                        key={col.key} 
+                        className={`px-4 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest ${
+                          col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
+                        } ${col.key === 'rank' ? 'w-16' : ''}`}
+                      >
+                        {col.header}
+                      </th>
+                    ))
+                  ) : (
+                    <>
+                      <th className="px-4 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-16">Rank</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Player</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-orange-500 uppercase tracking-widest text-right">
+                        {currentCategoryConfig.label}
+                      </th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                <AnimatePresence mode="popLayout">
+                  {viewType === 'teams' ? (
+                    sortedTeamLeaders.length > 0 ? (
+                      sortedTeamLeaders.map((leader, index) => (
+                        <motion.tr
+                          key={leader.teamId}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.98 }}
+                          transition={{ delay: index * 0.03 }}
+                          className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${
+                            userTeam?.id === leader.teamId ? 'bg-orange-600/5' : ''
+                          }`}
+                        >
+                          {teamColumns.map((col) => {
+                            if (col.key === 'rank') {
+                              return (
+                                <td key={col.key} className="px-4 py-4">
+                                  <div className={`text-sm font-black italic ${
+                                    index < 3 ? 'text-orange-500' : 'text-zinc-500'
+                                  }`}>
+                                    {index + 1}
+                                  </div>
+                                </td>
+                              );
+                            }
+                            if (col.key === 'team') {
+                              return (
+                                <td key={col.key} className="px-4 py-4">
+                                  <Link to={`/teams/${leader.teamId}`} className="flex items-center gap-3 group">
+                                    <TeamLogo 
+                                      schoolName={leader.name} 
+                                      size="sm"
+                                      className="bg-zinc-950 rounded-lg p-1 border border-zinc-800 group-hover:scale-110 transition-transform"
+                                    />
+                                    <div>
+                                      <div className="flex items-center gap-1.5">
+                                        {leader.currentRank && leader.currentRank <= 25 && (
+                                          <span className="text-[10px] font-black text-orange-500">#{leader.currentRank}</span>
+                                        )}
+                                        <span className="text-sm font-black text-white uppercase italic tracking-tight group-hover:text-orange-500 transition-colors">
+                                          {leader.name}
+                                        </span>
+                                      </div>
+                                      <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
+                                        {leader.conference}
+                                      </p>
+                                    </div>
+                                  </Link>
+                                </td>
+                              );
+                            }
 
-                      {/* Team Info */}
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-zinc-950 rounded-2xl p-2 border border-zinc-800 group-hover:scale-110 transition-transform">
-                          <img 
-                            src={getTeamLogo(leader.name)} 
-                            alt={leader.name} 
-                            className="w-full h-full object-contain"
-                            referrerPolicy="no-referrer"
-                          />
-                        </div>
-                        <div>
-                          <h3 className="font-black text-white uppercase italic tracking-tight group-hover:text-orange-500 transition-colors">
-                            {leader.name}
-                          </h3>
-                          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                            {leader.conference} • {leader.gamesPlayed} GP
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Stat Value */}
-                    <div className="text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <span className="text-xl font-black text-white italic">
-                          {statValue.toFixed(1)}
-                        </span>
-                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mt-1">
-                          {activeConfig.unit}
-                        </span>
-                      </div>
-                      {activeCategory === 'turnoverMargin' && (
-                        <div className={`flex items-center justify-end gap-0.5 text-[10px] font-black uppercase ${statValue > 0 ? 'text-green-500' : statValue < 0 ? 'text-red-500' : 'text-zinc-500'}`}>
-                          {statValue > 0 ? <ArrowUpRight size={10} /> : statValue < 0 ? <ArrowDownRight size={10} /> : null}
-                          {statValue > 0 ? 'Positive' : statValue < 0 ? 'Negative' : 'Even'}
-                        </div>
-                      )}
-                    </div>
-                  </Link>
-                </motion.div>
-              );
-            })
-          ) : (
-            <div className="py-20 text-center space-y-4 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-[3rem]">
-              <div className="w-16 h-16 bg-zinc-950 rounded-full flex items-center justify-center mx-auto border border-zinc-800">
-                <Trophy className="text-zinc-700" size={32} />
-              </div>
-              <div className="space-y-1">
-                <p className="text-white font-black uppercase italic">No Data Available</p>
-                <p className="text-zinc-500 text-sm font-medium">Complete games to populate the leaderboard.</p>
-              </div>
-            </div>
-          )}
-        </AnimatePresence>
+                            const val = (leader as any)[col.key];
+                            return (
+                              <td 
+                                key={col.key} 
+                                className={`px-4 py-4 ${
+                                  col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
+                                }`}
+                              >
+                                <span className={`text-xs font-bold ${col.align === 'right' ? 'text-white italic' : 'text-zinc-400'}`}>
+                                  {col.format ? col.format(val, leader) : val}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </motion.tr>
+                      ))
+                    ) : (
+                      <EmptyRow colSpan={teamColumns.length || 4} />
+                    )
+                  ) : (
+                    playerLeaders.length > 0 ? (
+                      playerLeaders.map((player, index) => (
+                        <motion.tr
+                          key={player.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.98 }}
+                          transition={{ delay: index * 0.03 }}
+                          className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${
+                            userTeam?.id === player.teamId ? 'bg-orange-600/5' : ''
+                          }`}
+                        >
+                          <td className="px-4 py-4">
+                            <div className={`text-sm font-black italic ${
+                              index < 3 ? 'text-orange-500' : 'text-zinc-500'
+                            }`}>
+                              {index + 1}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-3 group">
+                              <TeamLogo 
+                                schoolName={player.teamId} 
+                                size="sm"
+                                className="bg-zinc-950 rounded-lg p-1 border border-zinc-800 opacity-50"
+                              />
+                              <div>
+                                <h3 className="text-sm font-black text-white uppercase italic tracking-tight">
+                                  {player.name}
+                                </h3>
+                                <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
+                                  {player.pos} • {player.teamId}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <div className="flex flex-col items-end">
+                              <span className="text-sm font-black text-white italic">
+                                {((player as any)[currentCategoryConfig.field] || 0)}
+                              </span>
+                              <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">
+                                {currentCategoryConfig.unit}
+                              </span>
+                            </div>
+                          </td>
+                        </motion.tr>
+                      ))
+                    ) : (
+                      <EmptyRow colSpan={3} />
+                    )
+                  )}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+const EmptyRow = ({ colSpan }: { colSpan: number }) => (
+  <tr>
+    <td colSpan={colSpan} className="py-20 text-center">
+      <div className="space-y-2">
+        <Trophy className="mx-auto text-zinc-800" size={32} />
+        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">No data available for this season</p>
+      </div>
+    </td>
+  </tr>
+);

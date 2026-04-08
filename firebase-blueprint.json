@@ -47,9 +47,31 @@
         "totalYards": { "type": "integer" },
         "passYardsAllowed": { "type": "integer" },
         "rushYardsAllowed": { "type": "integer" },
-        "totalYardsAllowed": { "type": "integer" }
+        "totalYardsAllowed": { "type": "integer" },
+        "headCoachId": { "type": "string", "description": "Reference to the Coach document ID for HC." },
+        "ocId": { "type": "string", "description": "Reference to the Coach document ID for OC." },
+        "dcId": { "type": "string", "description": "Reference to the Coach document ID for DC." }
       },
       "required": ["ownerId", "school", "role"]
+    },
+    "Coach": {
+      "title": "Coach",
+      "description": "A standalone coach entity for the Coaching Carousel.",
+      "type": "object",
+      "properties": {
+        "leagueId": { "type": "string", "description": "ID of the league this coach belongs to." },
+        "name": { "type": "string", "description": "Full name of the coach." },
+        "role": { "type": "string", "enum": ["HC", "OC", "DC", "Unassigned"], "description": "Current role." },
+        "teamId": { "type": "string", "description": "ID of the team the coach is currently assigned to (null if free agent)." },
+        "userId": { "type": "string", "description": "ID of the human user linked to this coach persona." },
+        "careerWins": { "type": "integer" },
+        "careerLosses": { "type": "integer" },
+        "schoolWins": { "type": "integer" },
+        "schoolLosses": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["leagueId", "name", "role"]
     },
     "GlobalTeam": {
       "title": "GlobalTeam",
@@ -137,6 +159,73 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "pos", "stars", "leagueId", "teamId", "scoutingStatus", "priority"]
+    },
+    "Game": {
+      "title": "Game",
+      "description": "A matchup between two teams.",
+      "type": "object",
+      "properties": {
+        "week": { "type": "integer" },
+        "homeTeamId": { "type": "string" },
+        "awayTeamId": { "type": "string" },
+        "homeScore": { "type": "integer" },
+        "awayScore": { "type": "integer" },
+        "status": { "type": "string", "enum": ["scheduled", "final"] },
+        "leagueId": { "type": "string" },
+        "season": { "type": "integer" },
+        "quarterLengthAtGame": { "type": "integer", "description": "Quarter length in minutes used for TOP normalization." },
+        "homeStats": { "$ref": "TeamStats" },
+        "awayStats": { "$ref": "TeamStats" }
+      },
+      "required": ["week", "homeTeamId", "awayTeamId", "status", "leagueId", "season"]
+    },
+    "TeamStats": {
+      "title": "TeamStats",
+      "description": "Granular team statistics for a game.",
+      "type": "object",
+      "properties": {
+        "passYards": { "type": "integer" },
+        "rushYards": { "type": "integer" },
+        "turnovers": { "type": "integer" },
+        "takeaways": { "type": "integer" },
+        "firstDowns": { "type": "integer" },
+        "totalPlays": { "type": "integer" },
+        "rushingAttempts": { "type": "integer" },
+        "rushingTds": { "type": "integer" },
+        "completions": { "type": "integer" },
+        "passingAttempts": { "type": "integer" },
+        "passingTds": { "type": "integer" },
+        "fumblesLost": { "type": "integer" },
+        "interceptionsThrown": { "type": "integer" },
+        "penalties": { "type": "integer" },
+        "penaltyYards": { "type": "integer" },
+        "timeOfPossession": { "type": "string", "description": "TOP in MM:SS format." }
+      }
+    },
+    "Poll": {
+      "title": "Poll",
+      "description": "Weekly Top 25 rankings.",
+      "type": "object",
+      "properties": {
+        "leagueId": { "type": "string" },
+        "seasonYear": { "type": "integer" },
+        "week": { "type": "integer" },
+        "pollType": { "type": "string", "enum": ["Media", "Coaches", "CFP"] },
+        "rankings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "teamId": { "type": "string" },
+              "rank": { "type": "integer" },
+              "previousRank": { "type": "integer" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["leagueId", "seasonYear", "week", "pollType", "rankings"]
     }
   },
   "firestore": {
@@ -145,7 +234,11 @@
     "/leagues/{leagueId}/seasons": { "schema": "Season", "description": "Seasons for a specific league." },
     "/leagues/{leagueId}/teams": { "schema": "Team", "description": "Teams in a specific league." },
     "/leagues/{leagueId}/stats": { "schema": "Stat", "description": "Stats for a specific league." },
+    "/leagues/{leagueId}/games": { "schema": "Game", "description": "Matchups for a specific league." },
+    "/leagues/{leagueId}/teamStats": { "schema": "TeamStats", "description": "Granular team stats (if stored separately)." },
     "/leagues/{leagueId}/prospects": { "schema": "Prospect", "description": "Global pool of recruits for the league." },
-    "/leagues/{leagueId}/teams/{teamId}/targets": { "schema": "Target", "description": "Recruits tracked by a specific team." }
+    "/leagues/{leagueId}/teams/{teamId}/targets": { "schema": "Target", "description": "Recruits tracked by a specific team." },
+    "/coaches": { "schema": "Coach", "description": "Standalone coaches for the Coaching Carousel." },
+    "/polls": { "schema": "Poll", "description": "Weekly Top 25 polls." }
   }
 }

@@ -30,7 +30,7 @@ export const Dashboard: React.FC = () => {
             <div className="px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
               <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                {leagueInfo?.name} • Season {leagueInfo?.currentYear || 1} • Week {leagueInfo?.currentWeek ?? 1}
+                {leagueInfo?.name} • Season {leagueInfo?.currentYear || 2025} • Week {leagueInfo?.currentWeek ?? 0}
               </span>
             </div>
           </div>
@@ -63,6 +63,7 @@ export const Dashboard: React.FC = () => {
                 currentWeek={leagueInfo.currentWeek}
                 userTeamId={userTeam.id}
                 isCommissioner={isCommissioner}
+                leagueInfo={leagueInfo}
               />
             ) : (
               <div className="bg-zinc-900/50 border border-dashed border-zinc-800 rounded-[2rem] p-12 flex flex-col items-center justify-center text-center space-y-4">
@@ -84,7 +85,7 @@ export const Dashboard: React.FC = () => {
               <div className="flex gap-4">
                 <div className="flex flex-col items-center">
                   <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center text-white text-xs font-black">
-                    {leagueInfo?.currentWeek ?? 1}
+                    {leagueInfo?.currentWeek ?? 0}
                   </div>
                   <div className="w-0.5 h-full bg-zinc-800 my-2" />
                 </div>
@@ -96,7 +97,7 @@ export const Dashboard: React.FC = () => {
               <div className="flex gap-4">
                 <div className="flex flex-col items-center">
                   <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-black">
-                    {(leagueInfo?.currentWeek ?? 1) + 1}
+                    {(leagueInfo?.currentWeek ?? 0) + 1}
                   </div>
                   <div className="w-0.5 h-full bg-zinc-800 my-2" />
                 </div>

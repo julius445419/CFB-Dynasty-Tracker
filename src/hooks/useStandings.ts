@@ -21,7 +21,7 @@ export interface TeamStanding extends TeamAssignment {
   lastFive: ('W' | 'L')[];
 }
 
-export const useStandings = (leagueId: string | null) => {
+export const useStandings = (leagueId: string | null, currentYear?: number) => {
   const [standings, setStandings] = useState<TeamStanding[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<any>(null);
@@ -167,7 +167,14 @@ export const useStandings = (leagueId: string | null) => {
     });
 
     const unsubscribeGames = onSnapshot(finalGamesQuery, (snapshot) => {
-      games = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+      games = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Game))
+        .filter(game => {
+          // If currentYear is provided, filter by it. Treat missing season as currentYear for legacy support.
+          if (!currentYear) return true;
+          return !game.season || game.season === currentYear;
+        });
+      
       if (games.length > 0) {
         setLastUpdated(games[0].updatedAt);
       }
@@ -178,7 +185,7 @@ export const useStandings = (leagueId: string | null) => {
       unsubscribeTeams();
       unsubscribeGames();
     };
-  }, [leagueId]);
+  }, [leagueId, currentYear]);
 
   return { standings, loading, lastUpdated };
 };

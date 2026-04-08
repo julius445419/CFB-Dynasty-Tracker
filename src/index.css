@@ -33,6 +33,14 @@
     @apply border border-white/10;
   }
 
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
   }

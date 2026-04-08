@@ -485,7 +485,7 @@ export const Schools = () => {
               <div className="absolute -inset-4 bg-orange-600/20 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition duration-700" />
               <div className="w-24 h-24 sm:w-40 sm:h-40 glass-surface rounded-3xl sm:rounded-[2.5rem] p-4 sm:p-6 flex items-center justify-center relative z-10 border border-white/10">
                 {logoUrl ? (
-                  <img src={logoUrl} alt={selectedSchool.name} className="w-full h-full object-contain drop-shadow-2xl" referrerPolicy="no-referrer" />
+                  <img src={logoUrl} alt={selectedSchool.name} className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" referrerPolicy="no-referrer" />
                 ) : (
                   <SchoolIcon size={48} className="text-orange-600 sm:w-20 sm:h-20" />
                 )}
@@ -865,7 +865,7 @@ export const Schools = () => {
                           <img 
                             src={`https://a.espncdn.com/i/teamlogos/ncaa/500/${opponent.logoId}.png`} 
                             alt={opponent.name}
-                            className="w-full h-full object-contain"
+                            className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]"
                             referrerPolicy="no-referrer"
                           />
                         ) : (
@@ -1213,7 +1213,7 @@ export const Schools = () => {
                           }}
                         >
                           {logoUrl ? (
-                            <img src={logoUrl} alt={selectedSchool.name} className="w-full h-full object-contain p-2" referrerPolicy="no-referrer" />
+                            <img src={logoUrl} alt={selectedSchool.name} className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" referrerPolicy="no-referrer" />
                           ) : (
                             selectedSchool.name.charAt(0)
                           )}
@@ -1666,7 +1666,7 @@ export const Schools = () => {
                     <div className="flex items-center gap-4 sm:gap-6 flex-1">
                       <div className="w-12 h-12 sm:w-14 sm:h-14 glass-surface rounded-xl p-2 flex items-center justify-center border border-white/10 shrink-0 group-hover:scale-110 transition-transform duration-500">
                         {logoUrl ? (
-                          <img src={logoUrl} alt={school.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                          <img src={logoUrl} alt={school.name} className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" referrerPolicy="no-referrer" />
                         ) : (
                           <SchoolIcon size={24} className="text-orange-600" />
                         )}
@@ -1706,7 +1706,7 @@ export const Schools = () => {
                     <div className="flex items-start justify-between">
                       <div className={`${viewMode === 'compact' ? 'w-12 h-12 sm:w-14 sm:h-14 p-2 rounded-xl' : 'w-20 h-20 p-3 rounded-2xl'} glass-surface flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform duration-500`}>
                         {logoUrl ? (
-                          <img src={logoUrl} alt={school.name} className="w-full h-full object-contain drop-shadow-xl" referrerPolicy="no-referrer" />
+                          <img src={logoUrl} alt={school.name} className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" referrerPolicy="no-referrer" />
                         ) : (
                           <SchoolIcon size={viewMode === 'compact' ? 24 : 32} className="text-orange-600" />
                         )}

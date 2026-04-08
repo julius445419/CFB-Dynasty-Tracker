@@ -191,7 +191,7 @@ const CreateShadowCoach: React.FC = () => {
                           <img 
                             src={`https://a.espncdn.com/i/teamlogos/ncaa/500/${school.logoId}.png`} 
                             alt="" 
-                            className="w-full h-full object-contain" 
+                            className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" 
                             referrerPolicy="no-referrer" 
                           />
                         </div>

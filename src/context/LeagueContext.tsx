@@ -85,8 +85,8 @@ export const LeagueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           name: data.name,
           ownerId: data.ownerId,
           seasonPhase: data.seasonPhase || 'Off Season',
-          currentYear: typeof data.currentYear === 'number' && !isNaN(data.currentYear) ? data.currentYear : 2024,
-          currentWeek: typeof data.currentWeek === 'number' && !isNaN(data.currentWeek) ? data.currentWeek : 1,
+          currentYear: typeof data.currentYear === 'number' && !isNaN(data.currentYear) ? data.currentYear : 2025,
+          currentWeek: typeof data.currentWeek === 'number' && !isNaN(data.currentWeek) ? data.currentWeek : 0,
           settings: data.settings,
         };
         setLeagueInfo(info);

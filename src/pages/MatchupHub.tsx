@@ -29,17 +29,18 @@ import {
 import { db } from '../firebase';
 import { useLeague } from '../context/LeagueContext';
 import { useAuth } from '../context/AuthContext';
-import { Game, TeamAssignment, TeamStats } from '../types';
-import { getTeamLogo } from '../utils/teamAssets';
+import { Game, TeamAssignment, TeamStats, PlayerGameStats } from '../types';
+import { TeamLogo } from '../components/common/TeamLogo';
 import { Ghost } from 'lucide-react';
 import { UnifiedStatEntryModal } from '../components/modals/UnifiedStatEntryModal';
 import AddMatchupModal from '../components/modals/AddMatchupModal';
 import { BoxScoreView } from '../components/matchups/BoxScoreView';
+import { updateTeamStats } from '../services/statsService';
 
 const MatchupHub: React.FC = () => {
   const { currentLeagueId, leagueInfo, userRole, userTeam, loading: leagueLoading } = useLeague();
   const { user } = useAuth();
-  const [selectedWeek, setSelectedWeek] = useState<number>(1);
+  const [selectedWeek, setSelectedWeek] = useState<number>(0);
   const [games, setGames] = useState<Game[]>([]);
   const [teams, setTeams] = useState<Record<string, TeamAssignment>>({});
   const [loading, setLoading] = useState(true);
@@ -83,10 +84,12 @@ const MatchupHub: React.FC = () => {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const gamesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Game[];
+      const gamesData = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Game))
+        .filter(game => {
+          // If game has a season, it must match. If not, we treat it as current season for legacy support.
+          return !game.season || game.season === (leagueInfo?.currentYear || 2025);
+        });
       setGames(gamesData);
       setLoading(false);
     }, (error) => {
@@ -111,7 +114,56 @@ const MatchupHub: React.FC = () => {
       const teamsSnap = await getDocs(teamsRef);
       const finalGamesSnap = await getDocs(query(gamesRef, where('status', '==', 'final')));
       
-      const teamRecords: Record<string, { wins: number, losses: number, confWins: number, confLosses: number, pointsFor: number, pointsAgainst: number, schoolWins: number, schoolLosses: number, careerWins: number, careerLosses: number }> = {};
+      const teamRecords: Record<string, { 
+        wins: number, losses: number, confWins: number, confLosses: number, 
+        pointsFor: number, pointsAgainst: number, 
+        passYards: number, rushYards: number, totalYards: number,
+        passYardsAllowed: number, rushYardsAllowed: number, totalYardsAllowed: number,
+        schoolWins: number, schoolLosses: number, careerWins: number, careerLosses: number 
+      }> = {};
+
+      const teamSeasonStats: Record<string, {
+        teamId: string,
+        seasonYear: number,
+        gamesPlayed: number,
+        pointsScored: number,
+        pointsAllowed: number,
+        passAttempts: number,
+        passComps: number,
+        passYards: number,
+        passTds: number,
+        intsThrown: number,
+        rushAttempts: number,
+        rushYards: number,
+        rushTds: number,
+        firstDowns: number,
+        fumblesLost: number,
+        defPassAttempts: number,
+        defPassComps: number,
+        defPassYards: number,
+        defPassTds: number,
+        defIntsCaught: number,
+        defRushAttempts: number,
+        defRushYards: number,
+        defRushTds: number,
+        defFirstDownsAllowed: number,
+        defFumblesRecovered: number,
+        penalties: number,
+        penaltyYards: number,
+        timeOfPossessionSeconds: number,
+        normalizedTopSeconds: number,
+        compPct: number,
+        passYpg: number,
+        rushYpg: number,
+        rushYpc: number,
+        totalOffYpg: number,
+        ppg: number,
+        defPassYpgAllowed: number,
+        defRushYpgAllowed: number,
+        defTotalYpgAllowed: number,
+        papg: number,
+        turnoverMargin: number
+      }> = {};
       
       teamsSnap.docs.forEach(doc => {
         const data = doc.data() as TeamAssignment;
@@ -122,6 +174,12 @@ const MatchupHub: React.FC = () => {
           confLosses: 0, 
           pointsFor: 0, 
           pointsAgainst: 0,
+          passYards: 0,
+          rushYards: 0,
+          totalYards: 0,
+          passYardsAllowed: 0,
+          rushYardsAllowed: 0,
+          totalYardsAllowed: 0,
           schoolWins: data.schoolWins || 0,
           schoolLosses: data.schoolLosses || 0,
           careerWins: data.careerWins || 0,
@@ -141,16 +199,145 @@ const MatchupHub: React.FC = () => {
         const awayWon = (game.awayScore ?? 0) > (game.homeScore ?? 0);
 
         if (!teamRecords[game.homeTeamId]) {
-          teamRecords[game.homeTeamId] = { wins: 0, losses: 0, confWins: 0, confLosses: 0, pointsFor: 0, pointsAgainst: 0, schoolWins: 0, schoolLosses: 0, careerWins: 0, careerLosses: 0 };
+          teamRecords[game.homeTeamId] = { wins: 0, losses: 0, confWins: 0, confLosses: 0, pointsFor: 0, pointsAgainst: 0, passYards: 0, rushYards: 0, totalYards: 0, passYardsAllowed: 0, rushYardsAllowed: 0, totalYardsAllowed: 0, schoolWins: 0, schoolLosses: 0, careerWins: 0, careerLosses: 0 };
         }
         if (!teamRecords[game.awayTeamId]) {
-          teamRecords[game.awayTeamId] = { wins: 0, losses: 0, confWins: 0, confLosses: 0, pointsFor: 0, pointsAgainst: 0, schoolWins: 0, schoolLosses: 0, careerWins: 0, careerLosses: 0 };
+          teamRecords[game.awayTeamId] = { wins: 0, losses: 0, confWins: 0, confLosses: 0, pointsFor: 0, pointsAgainst: 0, passYards: 0, rushYards: 0, totalYards: 0, passYardsAllowed: 0, rushYardsAllowed: 0, totalYardsAllowed: 0, schoolWins: 0, schoolLosses: 0, careerWins: 0, careerLosses: 0 };
         }
         
-        teamRecords[game.homeTeamId].pointsFor += (game.homeScore || 0);
-        teamRecords[game.homeTeamId].pointsAgainst += (game.awayScore || 0);
-        teamRecords[game.awayTeamId].pointsFor += (game.awayScore || 0);
-        teamRecords[game.awayTeamId].pointsAgainst += (game.homeScore || 0);
+        const hScore = Number(game.homeScore) || 0;
+        const aScore = Number(game.awayScore) || 0;
+
+        // Update Team Season Stats Map
+        const season = game.season || 2025;
+        const hKey = `${game.homeTeamId}_${season}`;
+        const aKey = `${game.awayTeamId}_${season}`;
+
+        if (!teamSeasonStats[hKey]) {
+          teamSeasonStats[hKey] = { 
+            teamId: game.homeTeamId, seasonYear: season, gamesPlayed: 0, pointsScored: 0, pointsAllowed: 0,
+            passAttempts: 0, passComps: 0, passYards: 0, passTds: 0, intsThrown: 0,
+            rushAttempts: 0, rushYards: 0, rushTds: 0, firstDowns: 0, fumblesLost: 0,
+            defPassAttempts: 0, defPassComps: 0, defPassYards: 0, defPassTds: 0, defIntsCaught: 0,
+            defRushAttempts: 0, defRushYards: 0, defRushTds: 0, defFirstDownsAllowed: 0, defFumblesRecovered: 0,
+            penalties: 0, penaltyYards: 0, timeOfPossessionSeconds: 0, normalizedTopSeconds: 0,
+            compPct: 0, passYpg: 0, rushYpg: 0, rushYpc: 0, totalOffYpg: 0, ppg: 0,
+            defPassYpgAllowed: 0, defRushYpgAllowed: 0, defTotalYpgAllowed: 0, papg: 0, turnoverMargin: 0
+          };
+        }
+        if (!teamSeasonStats[aKey]) {
+          teamSeasonStats[aKey] = { 
+            teamId: game.awayTeamId, seasonYear: season, gamesPlayed: 0, pointsScored: 0, pointsAllowed: 0,
+            passAttempts: 0, passComps: 0, passYards: 0, passTds: 0, intsThrown: 0,
+            rushAttempts: 0, rushYards: 0, rushTds: 0, firstDowns: 0, fumblesLost: 0,
+            defPassAttempts: 0, defPassComps: 0, defPassYards: 0, defPassTds: 0, defIntsCaught: 0,
+            defRushAttempts: 0, defRushYards: 0, defRushTds: 0, defFirstDownsAllowed: 0, defFumblesRecovered: 0,
+            penalties: 0, penaltyYards: 0, timeOfPossessionSeconds: 0, normalizedTopSeconds: 0,
+            compPct: 0, passYpg: 0, rushYpg: 0, rushYpc: 0, totalOffYpg: 0, ppg: 0,
+            defPassYpgAllowed: 0, defRushYpgAllowed: 0, defTotalYpgAllowed: 0, papg: 0, turnoverMargin: 0
+          };
+        }
+
+        const gameHomeStats = (game.homeStats || {}) as TeamStats;
+        const gameAwayStats = (game.awayStats || {}) as TeamStats;
+
+        const topToSeconds = (top?: string): number => {
+          if (!top) return 0;
+          const [mins, secs] = top.split(':').map(Number);
+          return (mins || 0) * 60 + (secs || 0);
+        };
+
+        const qLen = leagueInfo?.settings?.quarterLength || 5;
+        const normFactor = 60 / (qLen * 4);
+
+        teamSeasonStats[hKey].gamesPlayed++;
+        teamSeasonStats[hKey].pointsScored += hScore;
+        teamSeasonStats[hKey].pointsAllowed += aScore;
+        teamSeasonStats[hKey].passAttempts += Number(gameHomeStats.passingAttempts || 0);
+        teamSeasonStats[hKey].passComps += Number(gameHomeStats.completions || 0);
+        teamSeasonStats[hKey].passYards += Number(gameHomeStats.passYards || 0);
+        teamSeasonStats[hKey].passTds += Number(gameHomeStats.passingTds || 0);
+        teamSeasonStats[hKey].intsThrown += Number(gameHomeStats.interceptionsThrown || 0);
+        teamSeasonStats[hKey].rushAttempts += Number(gameHomeStats.rushingAttempts || 0);
+        teamSeasonStats[hKey].rushYards += Number(gameHomeStats.rushYards || 0);
+        teamSeasonStats[hKey].rushTds += Number(gameHomeStats.rushingTds || 0);
+        teamSeasonStats[hKey].firstDowns += Number(gameHomeStats.firstDowns || 0);
+        teamSeasonStats[hKey].fumblesLost += Number(gameHomeStats.fumblesLost || 0);
+        teamSeasonStats[hKey].penalties += Number(gameHomeStats.penalties || 0);
+        teamSeasonStats[hKey].penaltyYards += Number(gameHomeStats.penaltyYards || 0);
+        const hTopSecs = topToSeconds(gameHomeStats.timeOfPossession);
+        teamSeasonStats[hKey].timeOfPossessionSeconds += hTopSecs;
+        teamSeasonStats[hKey].normalizedTopSeconds += (hTopSecs * normFactor);
+
+        // Mirror Effect for Home Team Defense
+        teamSeasonStats[hKey].defPassAttempts += Number(gameAwayStats.passingAttempts || 0);
+        teamSeasonStats[hKey].defPassComps += Number(gameAwayStats.completions || 0);
+        teamSeasonStats[hKey].defPassYards += Number(gameAwayStats.passYards || 0);
+        teamSeasonStats[hKey].defPassTds += Number(gameAwayStats.passingTds || 0);
+        teamSeasonStats[hKey].defIntsCaught += Number(gameAwayStats.interceptionsThrown || 0);
+        teamSeasonStats[hKey].defRushAttempts += Number(gameAwayStats.rushingAttempts || 0);
+        teamSeasonStats[hKey].defRushYards += Number(gameAwayStats.rushYards || 0);
+        teamSeasonStats[hKey].defRushTds += Number(gameAwayStats.rushingTds || 0);
+        teamSeasonStats[hKey].defFirstDownsAllowed += Number(gameAwayStats.firstDowns || 0);
+        teamSeasonStats[hKey].defFumblesRecovered += Number(gameAwayStats.fumblesLost || 0);
+
+        teamSeasonStats[aKey].gamesPlayed++;
+        teamSeasonStats[aKey].pointsScored += aScore;
+        teamSeasonStats[aKey].pointsAllowed += hScore;
+        teamSeasonStats[aKey].passAttempts += Number(gameAwayStats.passingAttempts || 0);
+        teamSeasonStats[aKey].passComps += Number(gameAwayStats.completions || 0);
+        teamSeasonStats[aKey].passYards += Number(gameAwayStats.passYards || 0);
+        teamSeasonStats[aKey].passTds += Number(gameAwayStats.passingTds || 0);
+        teamSeasonStats[aKey].intsThrown += Number(gameAwayStats.interceptionsThrown || 0);
+        teamSeasonStats[aKey].rushAttempts += Number(gameAwayStats.rushingAttempts || 0);
+        teamSeasonStats[aKey].rushYards += Number(gameAwayStats.rushYards || 0);
+        teamSeasonStats[aKey].rushTds += Number(gameAwayStats.rushingTds || 0);
+        teamSeasonStats[aKey].firstDowns += Number(gameAwayStats.firstDowns || 0);
+        teamSeasonStats[aKey].fumblesLost += Number(gameAwayStats.fumblesLost || 0);
+        teamSeasonStats[aKey].penalties += Number(gameAwayStats.penalties || 0);
+        teamSeasonStats[aKey].penaltyYards += Number(gameAwayStats.penaltyYards || 0);
+        const aTopSecs = topToSeconds(gameAwayStats.timeOfPossession);
+        teamSeasonStats[aKey].timeOfPossessionSeconds += aTopSecs;
+        teamSeasonStats[aKey].normalizedTopSeconds += (aTopSecs * normFactor);
+
+        // Mirror Effect for Away Team Defense
+        teamSeasonStats[aKey].defPassAttempts += Number(gameHomeStats.passingAttempts || 0);
+        teamSeasonStats[aKey].defPassComps += Number(gameHomeStats.completions || 0);
+        teamSeasonStats[aKey].defPassYards += Number(gameHomeStats.passYards || 0);
+        teamSeasonStats[aKey].defPassTds += Number(gameHomeStats.passingTds || 0);
+        teamSeasonStats[aKey].defIntsCaught += Number(gameHomeStats.interceptionsThrown || 0);
+        teamSeasonStats[aKey].defRushAttempts += Number(gameHomeStats.rushingAttempts || 0);
+        teamSeasonStats[aKey].defRushYards += Number(gameHomeStats.rushYards || 0);
+        teamSeasonStats[aKey].defRushTds += Number(gameHomeStats.rushingTds || 0);
+        teamSeasonStats[aKey].defFirstDownsAllowed += Number(gameHomeStats.firstDowns || 0);
+        teamSeasonStats[aKey].defFumblesRecovered += Number(gameHomeStats.fumblesLost || 0);
+
+        teamRecords[game.homeTeamId].pointsFor += hScore;
+        teamRecords[game.homeTeamId].pointsAgainst += aScore;
+        teamRecords[game.awayTeamId].pointsFor += aScore;
+        teamRecords[game.awayTeamId].pointsAgainst += hScore;
+
+        // Add Yardage
+        if (gameHomeStats) {
+          const pYds = Number(gameHomeStats.passYards) || 0;
+          const rYds = Number(gameHomeStats.rushYards) || 0;
+          teamRecords[game.homeTeamId].passYards += pYds;
+          teamRecords[game.homeTeamId].rushYards += rYds;
+          teamRecords[game.homeTeamId].totalYards += (pYds + rYds);
+          teamRecords[game.awayTeamId].passYardsAllowed += pYds;
+          teamRecords[game.awayTeamId].rushYardsAllowed += rYds;
+          teamRecords[game.awayTeamId].totalYardsAllowed += (pYds + rYds);
+        }
+        if (gameAwayStats) {
+          const pYds = Number(gameAwayStats.passYards) || 0;
+          const rYds = Number(gameAwayStats.rushYards) || 0;
+          teamRecords[game.awayTeamId].passYards += pYds;
+          teamRecords[game.awayTeamId].rushYards += rYds;
+          teamRecords[game.awayTeamId].totalYards += (pYds + rYds);
+          teamRecords[game.homeTeamId].passYardsAllowed += pYds;
+          teamRecords[game.homeTeamId].rushYardsAllowed += rYds;
+          teamRecords[game.homeTeamId].totalYardsAllowed += (pYds + rYds);
+        }
 
         if (homeWon) {
           teamRecords[game.homeTeamId].wins++;
@@ -184,6 +371,38 @@ const MatchupHub: React.FC = () => {
           updatedAt: serverTimestamp()
         });
       });
+
+      // Update Team Season Stats in Batch
+      Object.entries(teamSeasonStats).forEach(([statsId, stats]) => {
+        const games = stats.gamesPlayed || 0;
+        if (games > 0) {
+          stats.ppg = stats.pointsScored / games;
+          stats.passYpg = stats.passYards / games;
+          stats.rushYpg = stats.rushYards / games;
+          stats.totalOffYpg = (stats.passYards + stats.rushYards) / games;
+          stats.rushYpc = stats.rushAttempts > 0 ? stats.rushYards / stats.rushAttempts : 0;
+          stats.compPct = stats.passAttempts > 0 ? (stats.passComps / stats.passAttempts) * 100 : 0;
+          stats.papg = stats.pointsAllowed / games;
+          stats.defPassYpgAllowed = stats.defPassYards / games;
+          stats.defRushYpgAllowed = stats.defRushYards / games;
+          stats.defTotalYpgAllowed = (stats.defPassYards + stats.defRushYards) / games;
+          stats.turnoverMargin = (stats.defIntsCaught + stats.defFumblesRecovered) - (stats.intsThrown + stats.fumblesLost);
+        }
+
+        // Final safety check for Firestore (no NaN or Infinity)
+        const sanitizedStats = Object.fromEntries(
+          Object.entries(stats).map(([key, value]) => [
+            key, 
+            typeof value === 'number' ? (isNaN(value) || !isFinite(value) ? 0 : value) : value
+          ])
+        );
+
+        const statsRef = doc(db, 'leagues', currentLeagueId, 'team_stats', statsId);
+        batch.set(statsRef, {
+          ...sanitizedStats,
+          updatedAt: serverTimestamp()
+        });
+      });
       
       await batch.commit();
       alert('Standings and records synced successfully!');
@@ -200,7 +419,14 @@ const MatchupHub: React.FC = () => {
     setIsStatModalOpen(true);
   };
 
-  const handleSaveStats = async (stats: { homeScore: number; awayScore: number; homeStats: TeamStats; awayStats: TeamStats; quarterLengthAtGame?: number }) => {
+  const handleSaveStats = async (stats: { 
+    homeScore: number; 
+    awayScore: number; 
+    homeStats: TeamStats; 
+    awayStats: TeamStats; 
+    playerStats: PlayerGameStats[];
+    quarterLengthAtGame?: number 
+  }) => {
     if (!selectedGame) return;
     
     const batch = writeBatch(db);
@@ -209,23 +435,85 @@ const MatchupHub: React.FC = () => {
     const awayTeamRef = doc(db, 'leagues', selectedGame.leagueId, 'teams', selectedGame.awayTeamId);
 
     const isNewResult = selectedGame.status !== 'final';
-    const oldHomeScore = selectedGame.homeScore || 0;
-    const oldAwayScore = selectedGame.awayScore || 0;
+    const oldHomeScore = Number(selectedGame.homeScore) || 0;
+    const oldAwayScore = Number(selectedGame.awayScore) || 0;
     const oldHomeWon = oldHomeScore > oldAwayScore;
     const oldAwayWon = oldAwayScore > oldHomeScore;
     
-    const newHomeWon = stats.homeScore > stats.awayScore;
-    const newAwayWon = stats.awayScore > stats.homeScore;
+    const hScore = Number(stats.homeScore) || 0;
+    const aScore = Number(stats.awayScore) || 0;
+    const newHomeWon = hScore > aScore;
+    const newAwayWon = aScore > hScore;
+
+    const hPass = Number(stats.homeStats.passYards) || 0;
+    const hRush = Number(stats.homeStats.rushYards) || 0;
+    const aPass = Number(stats.awayStats.passYards) || 0;
+    const aRush = Number(stats.awayStats.rushYards) || 0;
+
+    const oldHPass = Number(selectedGame.homeStats?.passYards) || 0;
+    const oldHRush = Number(selectedGame.homeStats?.rushYards) || 0;
+    const oldAPass = Number(selectedGame.awayStats?.passYards) || 0;
+    const oldARush = Number(selectedGame.awayStats?.rushYards) || 0;
 
     batch.update(gameRef, {
-      homeScore: stats.homeScore,
-      awayScore: stats.awayScore,
+      homeScore: hScore,
+      awayScore: aScore,
       homeStats: stats.homeStats,
       awayStats: stats.awayStats,
       status: 'final',
       updatedAt: serverTimestamp(),
-      quarterLengthAtGame: stats.quarterLengthAtGame
+      quarterLengthAtGame: Number(stats.quarterLengthAtGame) || 0
     });
+
+    // Update Team Season Stats
+    await updateTeamStats(
+      batch,
+      selectedGame.leagueId,
+      selectedGame,
+      hScore,
+      aScore,
+      stats.homeStats,
+      stats.awayStats,
+      isNewResult,
+      leagueInfo?.settings?.quarterLength || 5
+    );
+
+    // 1. Process Player Stats (Write-Time Aggregation)
+    if (stats.playerStats && stats.playerStats.length > 0) {
+      stats.playerStats.forEach(ps => {
+        const statId = `${selectedGame.id}_${ps.playerId}`;
+        const statRef = doc(db, 'leagues', selectedGame.leagueId, 'playerStats', statId);
+        const playerRef = doc(db, 'leagues', selectedGame.leagueId, 'players', ps.playerId);
+
+        // Save the individual game stat
+        batch.set(statRef, {
+          ...ps,
+          season: selectedGame.season,
+          week: selectedGame.week,
+          updatedAt: serverTimestamp()
+        });
+
+        // Increment season totals on the player document
+        // Note: For simplicity in this iteration, we only aggregate on NEW results.
+        // If it's an update, the user should run the "Sync Standings" utility in Admin.
+        if (isNewResult) {
+          batch.update(playerRef, {
+            seasonPassYds: increment(ps.passYds || 0),
+            seasonPassTDs: increment(ps.passTDs || 0),
+            seasonPassInts: increment(ps.passInts || 0),
+            seasonRushYds: increment(ps.rushYds || 0),
+            seasonRushTDs: increment(ps.rushTDs || 0),
+            seasonRecYds: increment(ps.recYds || 0),
+            seasonRecTDs: increment(ps.recTDs || 0),
+            seasonReceptions: increment(ps.receptions || 0),
+            seasonTackles: increment(ps.tackles || 0),
+            seasonSacks: increment(ps.sacks || 0),
+            seasonInts: increment(ps.ints || 0),
+            updatedAt: serverTimestamp()
+          });
+        }
+      });
+    }
 
     // Update Team Records (Bypass for FCS)
     const isConfGame = teams[selectedGame.homeTeamId].conference === teams[selectedGame.awayTeamId].conference;
@@ -233,8 +521,14 @@ const MatchupHub: React.FC = () => {
     // Home Team Update
     if (!teams[selectedGame.homeTeamId].isFCS) {
       const homeUpdate: any = {
-        pointsFor: isNewResult ? increment(stats.homeScore) : increment(stats.homeScore - oldHomeScore),
-        pointsAgainst: isNewResult ? increment(stats.awayScore) : increment(stats.awayScore - oldAwayScore),
+        pointsFor: isNewResult ? increment(hScore) : increment(hScore - oldHomeScore),
+        pointsAgainst: isNewResult ? increment(aScore) : increment(aScore - oldAwayScore),
+        passYards: isNewResult ? increment(hPass) : increment(hPass - oldHPass),
+        rushYards: isNewResult ? increment(hRush) : increment(hRush - oldHRush),
+        totalYards: isNewResult ? increment(hPass + hRush) : increment((hPass + hRush) - (oldHPass + oldHRush)),
+        passYardsAllowed: isNewResult ? increment(aPass) : increment(aPass - oldAPass),
+        rushYardsAllowed: isNewResult ? increment(aRush) : increment(aRush - oldARush),
+        totalYardsAllowed: isNewResult ? increment(aPass + aRush) : increment((aPass + aRush) - (oldAPass + oldARush)),
         updatedAt: serverTimestamp()
       };
 
@@ -281,8 +575,14 @@ const MatchupHub: React.FC = () => {
     // Away Team Update
     if (!teams[selectedGame.awayTeamId].isFCS) {
       const awayUpdate: any = {
-        pointsFor: isNewResult ? increment(stats.awayScore) : increment(stats.awayScore - oldAwayScore),
-        pointsAgainst: isNewResult ? increment(stats.homeScore) : increment(stats.homeScore - oldHomeScore),
+        pointsFor: isNewResult ? increment(aScore) : increment(aScore - oldAwayScore),
+        pointsAgainst: isNewResult ? increment(hScore) : increment(hScore - oldHomeScore),
+        passYards: isNewResult ? increment(aPass) : increment(aPass - oldAPass),
+        rushYards: isNewResult ? increment(aRush) : increment(aRush - oldARush),
+        totalYards: isNewResult ? increment(aPass + aRush) : increment((aPass + aRush) - (oldAPass + oldARush)),
+        passYardsAllowed: isNewResult ? increment(hPass) : increment(hPass - oldHPass),
+        rushYardsAllowed: isNewResult ? increment(hRush) : increment(hRush - oldHRush),
+        totalYardsAllowed: isNewResult ? increment(hPass + hRush) : increment((hPass + hRush) - (oldHPass + oldHRush)),
         updatedAt: serverTimestamp()
       };
 
@@ -330,7 +630,7 @@ const MatchupHub: React.FC = () => {
     setIsStatModalOpen(false);
   };
 
-  const weeks = Array.from({ length: 20 }, (_, i) => i + 1);
+  const weeks = Array.from({ length: 21 }, (_, i) => i);
 
   if (leagueLoading) {
     return (
@@ -490,14 +790,11 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, 
       <div className="flex items-center justify-between gap-4">
         {/* Away Team */}
         <div className="flex-1 flex flex-col items-center text-center gap-2">
-          <div className={`w-16 h-16 bg-zinc-800 rounded-2xl p-2 flex items-center justify-center shadow-inner relative group ${awayTeam.isPlaceholder ? 'opacity-40 grayscale' : ''}`}>
-            <img 
-              src={getTeamLogo(awayTeam.name)} 
-              alt={awayTeam.name}
-              className="w-full h-full object-contain transition-transform group-hover:scale-110"
-              referrerPolicy="no-referrer"
-            />
-          </div>
+          <TeamLogo 
+            team={awayTeam} 
+            size="lg"
+            className={`bg-zinc-800 rounded-2xl p-2 flex items-center justify-center shadow-inner relative group ${awayTeam.isPlaceholder ? 'opacity-40 grayscale' : ''}`}
+          />
           <div className="space-y-0.5">
             <h3 className={`text-sm font-bold text-white line-clamp-1 ${awayTeam.isPlaceholder ? 'text-zinc-500 italic' : ''}`}>{awayTeam.name}</h3>
             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-tighter truncate max-w-[80px]">
@@ -544,14 +841,11 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, 
 
         {/* Home Team */}
         <div className="flex-1 flex flex-col items-center text-center gap-2">
-          <div className={`w-16 h-16 bg-zinc-800 rounded-2xl p-2 flex items-center justify-center shadow-inner relative group ${homeTeam.isPlaceholder ? 'opacity-40 grayscale' : ''}`}>
-            <img 
-              src={getTeamLogo(homeTeam.name)} 
-              alt={homeTeam.name}
-              className="w-full h-full object-contain transition-transform group-hover:scale-110"
-              referrerPolicy="no-referrer"
-            />
-          </div>
+          <TeamLogo 
+            team={homeTeam} 
+            size="lg"
+            className={`bg-zinc-800 rounded-2xl p-2 flex items-center justify-center shadow-inner relative group ${homeTeam.isPlaceholder ? 'opacity-40 grayscale' : ''}`}
+          />
           <div className="space-y-0.5">
             <h3 className={`text-sm font-bold text-white line-clamp-1 ${homeTeam.isPlaceholder ? 'text-zinc-500 italic' : ''}`}>{homeTeam.name}</h3>
             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-tighter truncate max-w-[80px]">

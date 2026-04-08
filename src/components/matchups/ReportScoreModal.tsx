@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Trophy, ArrowRight, CheckCircle2, AlertTriangle, Activity } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp, addDoc, collection, writeBatch, increment } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { Game, TeamAssignment, ActivityLog } from '../../types';
+import { Game, TeamAssignment, ActivityLog, TeamStats } from '../../types';
 import { getTeamLogo } from '../../utils/teamAssets';
 import { TeamLogo } from '../common/TeamLogo';
+import { updateTeamStats } from '../../services/statsService';
 
 interface ReportScoreModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface ReportScoreModalProps {
   leagueId: string;
   userTeamId: string;
   isAdmin?: boolean;
+  quarterLength?: number;
 }
 
 type Step = 'score' | 'stats';
@@ -28,7 +30,8 @@ export const ReportScoreModal: React.FC<ReportScoreModalProps> = ({
   awayTeam,
   leagueId,
   userTeamId,
-  isAdmin = false
+  isAdmin = false,
+  quarterLength = 5
 }) => {
   const isUserHome = game.homeTeamId === userTeamId;
   const [step, setStep] = useState<Step>('score');
@@ -169,6 +172,20 @@ export const ReportScoreModal: React.FC<ReportScoreModalProps> = ({
       }
 
       batch.update(gameRef, updateData);
+
+      // Update Team Season Stats
+      const isNewResult = game.status !== 'final';
+      await updateTeamStats(
+        batch,
+        leagueId,
+        game,
+        hScore,
+        aScore,
+        hStats as TeamStats,
+        aStats as TeamStats,
+        isNewResult,
+        quarterLength
+      );
 
       // Update Team Records (Bypass for FCS)
       const isConfGame = homeTeam.conference === awayTeam.conference;

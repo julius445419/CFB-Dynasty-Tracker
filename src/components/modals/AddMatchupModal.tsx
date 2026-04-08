@@ -23,9 +23,13 @@ interface AddMatchupModalProps {
   isOpen: boolean;
   onClose: () => void;
   prefillHomeTeam?: string; // School name
+  forcedWeek?: number;
+  fixedTeam?: any; // TeamAssignment
+  initialSide?: 'home' | 'away';
 }
 
 const WEEKS = [
+  { id: 0, label: 'Week 0' },
   ...Array.from({ length: 15 }, (_, i) => ({ id: i + 1, label: `Week ${i + 1}` })),
   { id: 16, label: 'Conference Championships' },
   { id: 17, label: 'Bowl Season' },
@@ -37,14 +41,17 @@ const WEEKS = [
 const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
   isOpen,
   onClose,
-  prefillHomeTeam
+  prefillHomeTeam,
+  forcedWeek,
+  fixedTeam,
+  initialSide = 'home'
 }) => {
   const { user } = useAuth();
   const { currentLeagueId, leagueInfo } = useLeague();
   
-  const [selectedWeek, setSelectedWeek] = useState<number>(leagueInfo?.currentWeek || 1);
-  const [homeSearch, setHomeSearch] = useState(prefillHomeTeam || '');
-  const [awaySearch, setAwaySearch] = useState('');
+  const [selectedWeek, setSelectedWeek] = useState<number>(forcedWeek || (leagueInfo?.currentWeek ?? 0));
+  const [homeSearch, setHomeSearch] = useState(prefillHomeTeam || (fixedTeam && initialSide === 'home' ? fixedTeam.name : ''));
+  const [awaySearch, setAwaySearch] = useState(fixedTeam && initialSide === 'away' ? fixedTeam.name : '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -72,10 +79,48 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
     }).slice(0, 10);
   }, [awaySearch]);
 
-  const [selectedHome, setSelectedHome] = useState(
-    prefillHomeTeam ? SCHOOLS.find(s => s.name === prefillHomeTeam) || null : null
+  const [selectedHome, setSelectedHome] = useState<any>(
+    prefillHomeTeam ? SCHOOLS.find(s => s.name === prefillHomeTeam) || null : 
+    (fixedTeam && initialSide === 'home' ? SCHOOLS.find(s => s.name === fixedTeam.name) || fixedTeam : null)
   );
-  const [selectedAway, setSelectedAway] = useState<any>(null);
+  const [selectedAway, setSelectedAway] = useState<any>(
+    fixedTeam && initialSide === 'away' ? SCHOOLS.find(s => s.name === fixedTeam.name) || fixedTeam : null
+  );
+  const [currentSide, setCurrentSide] = useState<'home' | 'away'>(initialSide);
+
+  // Update state when props change
+  React.useEffect(() => {
+    if (isOpen) {
+      if (forcedWeek) setSelectedWeek(forcedWeek);
+      if (fixedTeam) {
+        setCurrentSide(initialSide);
+        if (initialSide === 'home') {
+          setSelectedHome(SCHOOLS.find(s => s.name === fixedTeam.name) || fixedTeam);
+          setSelectedAway(null);
+          setAwaySearch('');
+        } else {
+          setSelectedAway(SCHOOLS.find(s => s.name === fixedTeam.name) || fixedTeam);
+          setSelectedHome(null);
+          setHomeSearch('');
+        }
+      }
+    }
+  }, [isOpen, forcedWeek, fixedTeam, initialSide]);
+
+  const toggleSide = () => {
+    if (!fixedTeam) return;
+    const newSide = currentSide === 'home' ? 'away' : 'home';
+    setCurrentSide(newSide);
+    if (newSide === 'home') {
+      setSelectedHome(SCHOOLS.find(s => s.name === fixedTeam.name) || fixedTeam);
+      setSelectedAway(null);
+      setAwaySearch('');
+    } else {
+      setSelectedAway(SCHOOLS.find(s => s.name === fixedTeam.name) || fixedTeam);
+      setSelectedHome(null);
+      setHomeSearch('');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,9 +201,10 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
       const homeTeamData = await getOrCreateTeam(selectedHome);
       const awayTeamData = await getOrCreateTeam(selectedAway);
 
-      // 3. Deterministic ID: week_[week]_[teamA]_[teamB] (sorted alphabetically)
+      // 3. Deterministic ID: season_[season]_week_[week]_[teamA]_[teamB] (sorted alphabetically)
+      const season = leagueInfo?.currentYear || 2025;
       const sortedNames = [selectedHome.name, selectedAway.name].sort();
-      const deterministicId = `week_${selectedWeek}_${sortedNames[0].replace(/\s+/g, '_')}_${sortedNames[1].replace(/\s+/g, '_')}`;
+      const deterministicId = `season_${season}_week_${selectedWeek}_${sortedNames[0].replace(/\s+/g, '_')}_${sortedNames[1].replace(/\s+/g, '_')}`;
 
       // 4. Auto-detect UvU
       const isUvU = homeTeamData.ownerId !== 'cpu' && awayTeamData.ownerId !== 'cpu';
@@ -185,7 +231,7 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
         isUvU,
         status: 'scheduled',
         leagueId: currentLeagueId,
-        season: leagueInfo?.currentYear || 2024,
+        season: leagueInfo?.currentYear || 2025,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -253,22 +299,39 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {/* Week Selection */}
                   <div className="space-y-3">
-                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">Select Week</label>
-                    <div className="flex overflow-x-auto no-scrollbar gap-2 pb-2">
-                      {WEEKS.map((w) => (
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">Select Week</label>
+                      {fixedTeam && (
                         <button
-                          key={w.id}
                           type="button"
-                          onClick={() => setSelectedWeek(w.id)}
-                          className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                            selectedWeek === w.id
-                              ? 'bg-orange-600 text-white'
-                              : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
-                          }`}
+                          onClick={toggleSide}
+                          className="text-[10px] font-black text-orange-500 uppercase tracking-widest hover:text-orange-400 transition-colors"
                         >
-                          {w.label}
+                          Switch to {currentSide === 'home' ? 'Away' : 'Home'}
                         </button>
-                      ))}
+                      )}
+                    </div>
+                    <div className="flex overflow-x-auto no-scrollbar gap-2 pb-2">
+                      {forcedWeek ? (
+                        <div className="px-4 py-2 bg-orange-600 text-white rounded-xl text-xs font-bold">
+                          Week {forcedWeek}
+                        </div>
+                      ) : (
+                        WEEKS.map((w) => (
+                          <button
+                            key={w.id}
+                            type="button"
+                            onClick={() => setSelectedWeek(w.id)}
+                            className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                              selectedWeek === w.id
+                                ? 'bg-orange-600 text-white'
+                                : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
+                            }`}
+                          >
+                            {w.label}
+                          </button>
+                        ))
+                      )}
                     </div>
                   </div>
 
@@ -281,12 +344,18 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
                           <div className="flex items-center justify-between p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
                             <div className="flex items-center gap-3">
                               <TeamLogo schoolName={selectedHome.name} className="w-8 h-8 object-contain" />
-                              <span className="font-bold text-white">{selectedHome.name}</span>
+                              <div className="flex flex-col">
+                                <span className="font-bold text-white">{selectedHome.name}</span>
+                                {fixedTeam && currentSide === 'home' && (
+                                  <span className="text-[8px] font-black text-orange-500 uppercase tracking-widest">Your Team</span>
+                                )}
+                              </div>
                             </div>
                           <button 
                             type="button" 
+                            disabled={fixedTeam && currentSide === 'home'}
                             onClick={() => { setSelectedHome(null); setHomeSearch(''); }}
-                            className="text-zinc-500 hover:text-red-500"
+                            className={`text-zinc-500 hover:text-red-500 ${fixedTeam && currentSide === 'home' ? 'opacity-0 cursor-default' : ''}`}
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -332,12 +401,18 @@ const AddMatchupModal: React.FC<AddMatchupModalProps> = ({
                           <div className="flex items-center justify-between p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
                             <div className="flex items-center gap-3">
                               <TeamLogo schoolName={selectedAway.name} className="w-8 h-8 object-contain" />
-                              <span className="font-bold text-white">{selectedAway.name}</span>
+                              <div className="flex flex-col">
+                                <span className="font-bold text-white">{selectedAway.name}</span>
+                                {fixedTeam && currentSide === 'away' && (
+                                  <span className="text-[8px] font-black text-orange-500 uppercase tracking-widest">Your Team</span>
+                                )}
+                              </div>
                             </div>
                           <button 
                             type="button" 
+                            disabled={fixedTeam && currentSide === 'away'}
                             onClick={() => { setSelectedAway(null); setAwaySearch(''); }}
-                            className="text-zinc-500 hover:text-red-500"
+                            className={`text-zinc-500 hover:text-red-500 ${fixedTeam && currentSide === 'away' ? 'opacity-0 cursor-default' : ''}`}
                           >
                             <X className="w-4 h-4" />
                           </button>

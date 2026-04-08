@@ -1,14 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useLeague } from '../context/LeagueContext';
-import { doc, updateDoc } from 'firebase/firestore';
+import { 
+  collection,
+  query,
+  where,
+  getDocs,
+  writeBatch,
+  serverTimestamp,
+  doc, 
+  updateDoc 
+} from 'firebase/firestore';
 import { db } from '../firebase';
-import { Save, Edit2, X, Lock, Shield, Clock, Settings2 } from 'lucide-react';
+import { Save, Edit2, X, Lock, Shield, Clock, Settings2, AlertCircle, Loader2, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { LeagueSettings as ILeagueSettings } from '../types';
 
 export const LeagueSettings: React.FC = () => {
   const { leagueInfo, userRole } = useLeague();
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentYear, setCurrentYear] = useState<number>(leagueInfo?.currentYear || 2025);
+  const [currentWeek, setCurrentWeek] = useState<number>(leagueInfo?.currentWeek ?? 0);
+  const [seasonPhase, setSeasonPhase] = useState<string>(leagueInfo?.seasonPhase || 'Off Season');
+  const [isSaving, setIsSaving] = useState(false);
+  const [shouldMigrateGames, setShouldMigrateGames] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [confirmSync, setConfirmSync] = useState(false);
   const [draftSettings, setDraftSettings] = useState<ILeagueSettings>(leagueInfo?.settings || {
     skillLevel: 'All-American',
     coachXP: 'Normal',
@@ -46,8 +62,11 @@ export const LeagueSettings: React.FC = () => {
   const isAdmin = userRole === 'Owner' || userRole === 'Commissioner';
 
   useEffect(() => {
-    if (leagueInfo?.settings) {
-      setDraftSettings(leagueInfo.settings);
+    if (leagueInfo) {
+      if (leagueInfo.settings) setDraftSettings(leagueInfo.settings);
+      setCurrentYear(leagueInfo.currentYear || 2025);
+      setCurrentWeek(leagueInfo.currentWeek ?? 0);
+      setSeasonPhase(leagueInfo.seasonPhase || 'Off Season');
     }
   }, [leagueInfo]);
 
@@ -67,23 +86,103 @@ export const LeagueSettings: React.FC = () => {
     if (!leagueInfo?.id) return;
     if (!validateSettings()) return;
 
+    setIsSaving(true);
     setError(null);
+
     try {
-      await updateDoc(doc(db, 'leagues', leagueInfo.id), {
-        settings: draftSettings
+      const newYear = parseInt(currentYear.toString());
+      const oldYear = leagueInfo.currentYear ? parseInt(leagueInfo.currentYear.toString()) : 2025;
+      const batch = writeBatch(db);
+
+      // If the year has changed and migration is enabled
+      if (newYear !== oldYear && shouldMigrateGames) {
+        const gamesRef = collection(db, 'leagues', leagueInfo.id, 'games');
+        const snapshot = await getDocs(gamesRef);
+        
+        snapshot.docs.forEach(gameDoc => {
+          const data = gameDoc.data();
+          // Update if it matches the old year OR if it has no season field (legacy)
+          if (data.season === oldYear || !data.season) {
+            batch.update(gameDoc.ref, { 
+              season: newYear,
+              updatedAt: serverTimestamp()
+            });
+          }
+        });
+      }
+
+      // Update the league document
+      batch.update(doc(db, 'leagues', leagueInfo.id), {
+        settings: draftSettings,
+        currentYear: newYear,
+        currentWeek: Number(currentWeek),
+        seasonPhase: seasonPhase
       });
+
+      await batch.commit();
       setIsEditing(false);
-    } catch (error) {
+      setSyncStatus({ type: 'success', message: 'Settings saved successfully!' });
+      setTimeout(() => setSyncStatus(null), 3000);
+    } catch (error: any) {
       console.error('Error saving settings:', error);
-      setError('Failed to save settings. Please try again.');
+      setError(`Failed to save settings: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSyncGames = async () => {
+    if (!leagueInfo?.id) return;
+    
+    if (!confirmSync) {
+      setConfirmSync(true);
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setSyncStatus(null);
+
+    try {
+      const targetYear = parseInt(currentYear.toString());
+      const gamesRef = collection(db, 'leagues', leagueInfo.id, 'games');
+      const snapshot = await getDocs(gamesRef);
+      const batch = writeBatch(db);
+      
+      snapshot.docs.forEach(gameDoc => {
+        batch.update(gameDoc.ref, { 
+          season: targetYear,
+          updatedAt: serverTimestamp()
+        });
+      });
+      
+      // Also ensure league year matches
+      batch.update(doc(db, 'leagues', leagueInfo.id), {
+        currentYear: targetYear
+      });
+      
+      await batch.commit();
+      setSyncStatus({ type: 'success', message: `Successfully synced ${snapshot.docs.length} games to ${targetYear}.` });
+      setConfirmSync(false);
+      setIsEditing(false);
+      setTimeout(() => setSyncStatus(null), 5000);
+    } catch (err: any) {
+      console.error("Error syncing games:", err);
+      setError(`Failed to sync games: ${err.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleCancel = () => {
-    if (leagueInfo?.settings) {
-      setDraftSettings(leagueInfo.settings);
+    if (leagueInfo) {
+      if (leagueInfo.settings) setDraftSettings(leagueInfo.settings);
+      setCurrentYear(leagueInfo.currentYear || 2025);
+      setCurrentWeek(leagueInfo.currentWeek ?? 0);
+      setSeasonPhase(leagueInfo.seasonPhase || 'Off Season');
     }
     setError(null);
+    setConfirmSync(false);
     setIsEditing(false);
   };
 
@@ -104,15 +203,18 @@ export const LeagueSettings: React.FC = () => {
             <div className="flex gap-3">
               <button 
                 onClick={handleCancel} 
-                className="px-6 py-2.5 bg-zinc-900 text-zinc-400 font-bold rounded-2xl border border-zinc-800 hover:bg-zinc-800 hover:text-white transition-all flex items-center gap-2 uppercase tracking-widest text-xs"
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-zinc-900 text-zinc-400 font-bold rounded-2xl border border-zinc-800 hover:bg-zinc-800 hover:text-white transition-all flex items-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50"
               >
                 <X size={16} /> Cancel
               </button>
               <button 
                 onClick={handleSave} 
-                className="px-6 py-2.5 bg-orange-600 text-white font-bold rounded-2xl hover:bg-orange-500 transition-all flex items-center gap-2 uppercase tracking-widest text-xs shadow-lg shadow-orange-600/20"
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-orange-600 text-white font-bold rounded-2xl hover:bg-orange-500 transition-all flex items-center gap-2 uppercase tracking-widest text-xs shadow-lg shadow-orange-600/20 disabled:opacity-50"
               >
-                <Save size={16} /> Save Changes
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save size={16} />}
+                {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           ) : (
@@ -126,14 +228,114 @@ export const LeagueSettings: React.FC = () => {
         )}
       </header>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/50 text-red-500 p-4 rounded-2xl text-sm font-bold flex items-center gap-3">
-          <Lock size={16} />
-          {error}
+      {syncStatus && (
+        <div className={`p-4 rounded-2xl text-sm font-bold flex items-center gap-3 ${
+          syncStatus.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/50 text-emerald-500' : 'bg-red-500/10 border border-red-500/50 text-red-500'
+        }`}>
+          {syncStatus.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+          {syncStatus.message}
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Season Management */}
+        <div className="bg-zinc-900 p-8 rounded-[32px] border border-zinc-800 space-y-6 shadow-xl">
+          <div className="flex items-center gap-3 mb-2">
+            <Clock className="w-6 h-6 text-orange-600" />
+            <h2 className="text-xl font-black text-white uppercase italic tracking-tight">Season <span className="text-orange-600">Management</span></h2>
+          </div>
+
+          <div className="flex items-center gap-3 p-4 bg-orange-600/10 border border-orange-600/20 rounded-2xl">
+            <AlertCircle className="text-orange-500 shrink-0" size={18} />
+            <p className="text-[10px] font-black text-orange-200 uppercase tracking-widest leading-relaxed">
+              Updating the season year is non-destructive. Your historical games and stats will be preserved, but the app will transition to showing data for the new active season.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">Active Season Year</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={currentYear}
+                  onChange={(e) => setCurrentYear(parseInt(e.target.value))}
+                  disabled={!isEditing}
+                  className="flex-1 bg-zinc-950 text-white p-4 rounded-2xl border border-zinc-900 focus:border-orange-600 outline-none transition-all font-bold disabled:opacity-50"
+                />
+                {isEditing && (
+                  <button
+                    onClick={handleSyncGames}
+                    disabled={isSaving}
+                    className={`px-4 rounded-2xl border transition-all flex items-center justify-center group relative ${
+                      confirmSync 
+                        ? 'bg-orange-600 border-orange-500 text-white animate-pulse' 
+                        : 'bg-zinc-800 border-zinc-700 text-orange-500 hover:bg-zinc-700'
+                    }`}
+                    title={confirmSync ? "Click again to confirm sync" : "Force sync all games to this year"}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-5 h-5" />
+                    )}
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block w-48 p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-[8px] font-bold text-zinc-400 uppercase tracking-widest text-center shadow-2xl z-50">
+                      {confirmSync ? "CONFIRM: Update ALL games to this year?" : "Sync all games to this year"}
+                    </div>
+                  </button>
+                )}
+              </div>
+              
+              {isEditing && currentYear !== (leagueInfo?.currentYear || 2025) && (
+                <div className="mt-3 p-3 bg-zinc-950 border border-zinc-900 rounded-xl flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-black text-white uppercase tracking-widest">Migrate Games?</span>
+                    <span className="text-[8px] text-zinc-500 uppercase tracking-tighter">Update existing games to {currentYear}</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={shouldMigrateGames}
+                    onChange={(e) => setShouldMigrateGames(e.target.checked)}
+                    className="w-5 h-5 accent-orange-600 cursor-pointer"
+                  />
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">Current Week</label>
+              <input
+                type="number"
+                min="0"
+                max="20"
+                value={currentWeek}
+                onChange={(e) => setCurrentWeek(parseInt(e.target.value))}
+                disabled={!isEditing}
+                className="w-full bg-zinc-950 text-white p-4 rounded-2xl border border-zinc-900 focus:border-orange-600 outline-none transition-all font-bold disabled:opacity-50"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">Dynasty Phase</label>
+            <select
+              value={seasonPhase}
+              onChange={(e) => setSeasonPhase(e.target.value)}
+              disabled={!isEditing}
+              className="w-full bg-zinc-950 text-white p-4 rounded-2xl border border-zinc-900 focus:border-orange-600 outline-none transition-all font-bold disabled:opacity-50"
+            >
+              <option value="Off Season">Off Season</option>
+              <option value="Pre-Season">Pre-Season</option>
+              <option value="Regular Season">Regular Season</option>
+              <option value="Conference Championships">Conference Championships</option>
+              <option value="Bowl Season">Bowl Season</option>
+              <option value="National Championship">National Championship</option>
+              <option value="Coaching Carousel">Coaching Carousel</option>
+              <option value="Transfer Portal">Transfer Portal</option>
+              <option value="Training Results">Training Results</option>
+            </select>
+          </div>
+        </div>
+
         {/* Core Settings */}
         <div className="bg-zinc-900 p-8 rounded-[32px] border border-zinc-800 space-y-6 shadow-xl">
           <div className="flex items-center gap-3 mb-2">

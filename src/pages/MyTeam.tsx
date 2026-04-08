@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, Users, LayoutGrid, BarChart3, Settings, Shield, Loader2, Sparkles, ChevronRight, Calendar, ArrowLeft } from 'lucide-react';
 import { useLeague } from '../context/LeagueContext';
-import { getTeamLogo, getTeamColor } from '../utils/teamAssets';
-import { RosterList } from '../components/roster/RosterList';
+import { getTeamColor } from '../utils/teamAssets';
+import { TeamLogo } from '../components/common/TeamLogo';
+import { RosterManager } from '../components/roster/RosterManager';
 import { MyBoard } from './MyBoard';
 import { CoachCard } from '../components/school/CoachCard';
 import { NextGameWidget } from '../components/school/NextGameWidget';
@@ -14,15 +15,18 @@ import AddMatchupModal from '../components/modals/AddMatchupModal';
 import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { Game, Prospect, TeamAssignment } from '../types';
+import { Game, Prospect, TeamAssignment, CarouselCoach } from '../types';
 
-type Tab = 'Home' | 'Roster' | 'Depth Chart' | 'Stats' | 'Recruiting';
+import { TeamSchedule } from '../components/school/TeamSchedule';
+
+type Tab = 'Home' | 'Schedule' | 'Roster' | 'Depth Chart' | 'Stats' | 'Recruiting';
 
 export const MyTeam: React.FC = () => {
   const { user } = useAuth();
   const { userTeam: currentUserTeam, loading: leagueLoading, leagueInfo, currentLeagueId } = useLeague();
   const { teamId } = useParams<{ teamId: string }>();
   const [targetTeam, setTargetTeam] = useState<TeamAssignment | null>(null);
+  const [headCoach, setHeadCoach] = useState<CarouselCoach | null>(null);
   const [teams, setTeams] = useState<TeamAssignment[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [prospects, setProspects] = useState<Prospect[]>([]);
@@ -54,6 +58,16 @@ export const MyTeam: React.FC = () => {
 
         if (teamData) {
           setTargetTeam(teamData);
+
+          // Fetch Head Coach
+          const coachesRef = collection(db, 'coaches');
+          const qHC = query(coachesRef, where('teamId', '==', teamData.id), where('role', '==', 'HC'));
+          const hcSnap = await getDocs(qHC);
+          if (!hcSnap.empty) {
+            setHeadCoach({ id: hcSnap.docs[0].id, ...hcSnap.docs[0].data() } as CarouselCoach);
+          } else {
+            setHeadCoach(null);
+          }
 
           // Fetch games
           const gamesRef = collection(db, 'leagues', currentLeagueId, 'games');
@@ -140,7 +154,6 @@ export const MyTeam: React.FC = () => {
     );
   }
 
-  const logoUrl = getTeamLogo(targetTeam.school || targetTeam.name);
   const teamColor = getTeamColor(targetTeam.school || targetTeam.name);
 
   return (
@@ -153,7 +166,7 @@ export const MyTeam: React.FC = () => {
             className="mb-8 flex items-center gap-2 text-zinc-500 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all"
           >
             <ArrowLeft size={14} />
-            Back to Directory
+            Back to Programs
           </button>
         )}
         <div className="flex items-center gap-6">
@@ -162,27 +175,24 @@ export const MyTeam: React.FC = () => {
               className="absolute inset-0 blur-2xl opacity-20 rounded-full"
               style={{ backgroundColor: teamColor }}
             />
-            <div className="relative w-24 h-24 bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-3xl flex items-center justify-center p-4">
-              <img 
-                src={logoUrl} 
-                alt={targetTeam.school || targetTeam.name} 
-                className="w-full h-full object-contain"
-                referrerPolicy="no-referrer"
-              />
-            </div>
+            <TeamLogo 
+              team={targetTeam} 
+              size="xl"
+              className="relative bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-3xl flex items-center justify-center p-4"
+            />
           </div>
           <div>
             <h1 className="text-3xl font-black tracking-tighter uppercase flex flex-wrap items-baseline gap-3">
               {targetTeam.school || targetTeam.name}
-              {targetTeam.coachName && (
+              {headCoach && (
                 <span className="text-orange-500 text-xl italic lowercase first-letter:uppercase">
-                  Coach {targetTeam.coachName}
+                  Coach {headCoach.name}
                 </span>
               )}
             </h1>
             <div className="flex items-center gap-3 mt-1">
               <span className="px-2 py-0.5 bg-orange-600 text-white text-[10px] font-black rounded uppercase tracking-widest">
-                {targetTeam.role || targetTeam.coachRole}
+                {headCoach?.role || 'HC'}
               </span>
               <span className="text-zinc-500 text-sm font-bold">
                 {targetTeam.wins || 0}-{targetTeam.losses || 0} RECORD
@@ -203,7 +213,7 @@ export const MyTeam: React.FC = () => {
         {/* Tabs Section */}
         <div className="mt-10 relative">
           <div className="flex items-center gap-8 border-b border-zinc-800 pb-4 overflow-x-auto no-scrollbar">
-            {(['Home', 'Roster', 'Depth Chart', 'Stats', 'Recruiting'] as Tab[]).map((tab) => (
+            {(['Home', 'Schedule', 'Roster', 'Depth Chart', 'Stats', 'Recruiting'] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -263,6 +273,17 @@ export const MyTeam: React.FC = () => {
               </div>
             </motion.div>
           )}
+          {activeTab === 'Schedule' && (
+            <motion.div
+              key="schedule"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <TeamSchedule teamId={targetTeam.id} />
+            </motion.div>
+          )}
           {activeTab === 'Roster' && (
             <motion.div
               key="roster"
@@ -271,7 +292,7 @@ export const MyTeam: React.FC = () => {
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.3 }}
             >
-              <RosterList />
+              <RosterManager teamId={targetTeam.id} />
             </motion.div>
           )}
           {activeTab === 'Recruiting' && (

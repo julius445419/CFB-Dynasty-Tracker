@@ -6,16 +6,19 @@ import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firesto
 import { db } from '../firebase';
 import { useLeague } from '../context/LeagueContext';
 import { useAuth } from '../context/AuthContext';
-import { getTeamLogo, getTeamColor } from '../utils/teamAssets';
-import { Game, TeamAssignment, Prospect } from '../types';
-import { RosterList } from '../components/roster/RosterList';
+import { getTeamColor } from '../utils/teamAssets';
+import { TeamLogo } from '../components/common/TeamLogo';
+import { Game, TeamAssignment, Prospect, CarouselCoach } from '../types';
+import { RosterManager } from '../components/roster/RosterManager';
 import { MyBoard } from './MyBoard';
 import { NextGameWidget } from '../components/school/NextGameWidget';
 import { RecentResultsWidget } from '../components/school/RecentResultsWidget';
 import { StatHub } from '../components/school/StatHub';
 import { CoachCard } from '../components/school/CoachCard';
 
-type Tab = 'Home' | 'Roster' | 'Depth Chart' | 'Recruiting';
+import { TeamSchedule } from '../components/school/TeamSchedule';
+
+type Tab = 'Home' | 'Schedule' | 'Roster' | 'Depth Chart' | 'Recruiting';
 
 export const SchoolHome: React.FC = () => {
   const { schoolId } = useParams<{ schoolId: string }>();
@@ -23,6 +26,7 @@ export const SchoolHome: React.FC = () => {
   const { user } = useAuth();
   const { currentLeagueId, leagueInfo } = useLeague();
   const [team, setTeam] = useState<TeamAssignment | null>(null);
+  const [headCoach, setHeadCoach] = useState<CarouselCoach | null>(null);
   const [teams, setTeams] = useState<TeamAssignment[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [prospects, setProspects] = useState<Prospect[]>([]);
@@ -46,11 +50,27 @@ export const SchoolHome: React.FC = () => {
         if (teamData) {
           setTeam(teamData);
 
-          // Fetch games
+          // Fetch Head Coach
+          const coachesRef = collection(db, 'coaches');
+          const qHC = query(coachesRef, where('teamId', '==', schoolId), where('role', '==', 'HC'));
+          const hcSnap = await getDocs(qHC);
+          if (!hcSnap.empty) {
+            setHeadCoach({ id: hcSnap.docs[0].id, ...hcSnap.docs[0].data() } as CarouselCoach);
+          } else {
+            setHeadCoach(null);
+          }
+
+          // Fetch games for this team
           const gamesRef = collection(db, 'leagues', currentLeagueId, 'games');
-          const gamesSnap = await getDocs(gamesRef);
-          const allGames = gamesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-          const teamGames = allGames.filter(g => g.homeTeamId === schoolId || g.awayTeamId === schoolId);
+          const qHome = query(gamesRef, where('homeTeamId', '==', schoolId));
+          const qAway = query(gamesRef, where('awayTeamId', '==', schoolId));
+          
+          const [homeSnap, awaySnap] = await Promise.all([getDocs(qHome), getDocs(qAway)]);
+          const teamGames = [
+            ...homeSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game)),
+            ...awaySnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game))
+          ].sort((a, b) => a.week - b.week);
+          
           setGames(teamGames);
 
           // Fetch next opponent
@@ -82,7 +102,6 @@ export const SchoolHome: React.FC = () => {
   if (loading) return <div className="flex h-screen items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
   if (!team) return <div className="text-white p-6">School not found.</div>;
 
-  const logoUrl = getTeamLogo(team.name);
   const teamColor = getTeamColor(team.name);
 
   return (
@@ -93,15 +112,17 @@ export const SchoolHome: React.FC = () => {
 
       {/* Identity Header */}
       <header className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 mb-6 flex items-center gap-6">
-        <div className="w-24 h-24 bg-zinc-800 rounded-2xl p-4 flex items-center justify-center">
-          <img src={logoUrl} alt={team.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-        </div>
+        <TeamLogo 
+          team={team} 
+          size="xl"
+          className="bg-zinc-800 rounded-2xl p-4 flex items-center justify-center"
+        />
         <div>
           <h1 className="text-3xl font-black uppercase tracking-tighter flex flex-wrap items-baseline gap-3">
             {team.name}
-            {team.coachName && (
+            {headCoach && (
               <span className="text-orange-500 text-xl italic lowercase first-letter:uppercase">
-                Coach {team.coachName}
+                Coach {headCoach.name}
               </span>
             )}
           </h1>
@@ -114,7 +135,7 @@ export const SchoolHome: React.FC = () => {
 
       {/* Tab Navigation */}
       <div className="flex gap-4 mb-6 overflow-x-auto no-scrollbar pb-2">
-        {(['Home', 'Roster', 'Depth Chart', 'Recruiting'] as Tab[]).map((tab) => (
+        {(['Home', 'Schedule', 'Roster', 'Depth Chart', 'Recruiting'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -169,7 +190,8 @@ export const SchoolHome: React.FC = () => {
         </>
       )}
 
-      {activeTab === 'Roster' && <RosterList />}
+      {activeTab === 'Schedule' && <TeamSchedule teamId={team.id} />}
+      {activeTab === 'Roster' && <RosterManager teamId={team.id} />}
       {activeTab === 'Recruiting' && <MyBoard teamId={team.id} />}
       
       {activeTab !== 'Home' && activeTab !== 'Roster' && activeTab !== 'Recruiting' && (

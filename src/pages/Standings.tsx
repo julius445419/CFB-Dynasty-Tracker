@@ -3,12 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, Users, Loader2, Calendar, ChevronRight, Globe, Shield, Ghost } from 'lucide-react';
 import { useLeague } from '../context/LeagueContext';
 import { useStandings, TeamStanding } from '../hooks/useStandings';
-import { getTeamLogo } from '../utils/teamAssets';
+import { TeamLogo } from '../components/common/TeamLogo';
 import { SCHOOLS } from '../constants/schools';
 
 export const Standings: React.FC = () => {
-  const { currentLeagueId, userTeam, loading: leagueLoading } = useLeague();
-  const { standings, loading, lastUpdated } = useStandings(currentLeagueId);
+  const { currentLeagueId, leagueInfo, userTeam, loading: leagueLoading } = useLeague();
+  const { standings, loading, lastUpdated } = useStandings(currentLeagueId, leagueInfo?.currentYear);
   const [selectedConference, setSelectedConference] = useState<string>('SEC');
 
   const conferences = useMemo(() => {
@@ -126,14 +126,11 @@ export const Standings: React.FC = () => {
                         </td>
                         <td className="px-4 py-5">
                           <div className="flex items-center gap-3">
-                            <div className="relative w-10 h-10 flex items-center justify-center bg-zinc-900 rounded-xl border border-zinc-800 p-1.5">
-                              <img 
-                                src={getTeamLogo(team.name)} 
-                                alt={team.name} 
-                                className="w-full h-full object-contain"
-                                referrerPolicy="no-referrer"
-                              />
-                            </div>
+                            <TeamLogo 
+                              schoolName={team.name} 
+                              size="md"
+                              className="bg-zinc-900 rounded-xl border border-zinc-800 p-1.5"
+                            />
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className={`text-sm font-black uppercase tracking-tight ${isUserTeam ? 'text-orange-500' : 'text-white'}`}>

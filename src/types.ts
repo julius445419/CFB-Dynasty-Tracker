@@ -24,6 +24,21 @@ export interface Coach {
   defensiveScheme: string;
 }
 
+export interface CarouselCoach {
+  id: string;
+  leagueId: string;
+  name: string;
+  role: 'HC' | 'OC' | 'DC' | 'Unassigned';
+  teamId: string | null;
+  userId?: string;
+  careerWins: number;
+  careerLosses: number;
+  schoolWins: number;
+  schoolLosses: number;
+  createdAt: any;
+  updatedAt: any;
+}
+
 export interface TeamAssignment {
   id?: string;
   name: string;
@@ -40,6 +55,7 @@ export interface TeamAssignment {
   isPlaceholder?: boolean;
   isFCS?: boolean;
   rank?: number;
+  currentRank?: number;
   wins?: number;
   losses?: number;
   confWins?: number;
@@ -58,6 +74,9 @@ export interface TeamAssignment {
   passYardsAllowed?: number;
   rushYardsAllowed?: number;
   totalYardsAllowed?: number;
+  headCoachId?: string;
+  ocId?: string;
+  dcId?: string;
 }
 
 export interface Player {
@@ -69,12 +88,28 @@ export interface Player {
   weight: number;
   year: 'Freshman' | 'Sophomore' | 'Junior' | 'Senior';
   redshirt: boolean;
+  isActive?: boolean;
   ovr: number;
   archetype?: string;
+  physicalAbilities?: string[];
+  mentalAbilities?: string[];
   teamId: string;
   leagueId: string;
   hometown?: string;
   createdAt: any;
+  updatedAt?: any;
+  // Aggregated Season Stats
+  seasonPassYds?: number;
+  seasonPassTDs?: number;
+  seasonPassInts?: number;
+  seasonRushYds?: number;
+  seasonRushTDs?: number;
+  seasonRecYds?: number;
+  seasonRecTDs?: number;
+  seasonReceptions?: number;
+  seasonTackles?: number;
+  seasonSacks?: number;
+  seasonInts?: number;
 }
 
 export interface TeamStats {
@@ -111,6 +146,8 @@ export interface Game {
   week: number;
   homeTeamId: string;
   awayTeamId: string;
+  homeTeamName?: string;
+  awayTeamName?: string;
   homeScore: number;
   awayScore: number;
   isUvU: boolean;
@@ -279,4 +316,73 @@ export interface Target extends Prospect {
   devTrait?: 'Normal' | 'Impact' | 'Star' | 'Elite' | 'Unknown';
   scoutedRatings?: Record<string, string>;
   visits?: string;
+}
+
+export interface PollRanking {
+  teamId: string;
+  rank: number;
+  previousRank?: number;
+}
+
+export interface Poll {
+  id: string;
+  leagueId: string;
+  seasonYear: number;
+  week: number;
+  pollType: 'Media' | 'Coaches' | 'CFP';
+  rankings: PollRanking[];
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface TeamSeasonStats {
+  id: string; // format ${teamId}_${seasonYear}
+  teamId: string;
+  seasonYear: number;
+  gamesPlayed: number;
+  pointsScored: number;
+  pointsAllowed: number;
+  // Offense
+  passAttempts: number;
+  passComps: number;
+  passYards: number;
+  passTds: number;
+  intsThrown: number;
+  rushAttempts: number;
+  rushYards: number;
+  rushTds: number;
+  firstDowns: number;
+  fumblesLost: number;
+  // Defense (Allowed)
+  defPassAttempts: number;
+  defPassComps: number;
+  defPassYards: number;
+  defPassTds: number;
+  defIntsCaught: number;
+  defRushAttempts: number;
+  defRushYards: number;
+  defRushTds: number;
+  defFirstDownsAllowed: number;
+  defFumblesRecovered: number;
+  // Miscellaneous
+  penalties: number;
+  penaltyYards: number;
+  timeOfPossessionSeconds: number;
+  // Offensive Averages
+  compPct: number;
+  passYpg: number;
+  rushYpg: number;
+  rushYpc: number;
+  totalOffYpg: number;
+  ppg: number;
+  // Defensive Averages
+  defPassYpgAllowed: number;
+  defRushYpgAllowed: number;
+  defTotalYpgAllowed: number;
+  papg: number;
+  // Miscellaneous
+  turnoverMargin: number;
+  normalizedTopSeconds: number;
+  createdAt?: any;
+  updatedAt?: any;
 }

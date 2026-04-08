@@ -2,32 +2,25 @@ import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useLeague } from '../context/LeagueContext';
-import { Game, TeamAssignment } from '../types';
+import { Game, TeamAssignment, TeamSeasonStats } from '../types';
 
-export interface TeamLeaderStats {
-  teamId: string;
+export interface TeamLeaderStats extends TeamSeasonStats {
   name: string;
-  logoId?: number;
+  logoId?: number | string;
   conference: string;
-  gamesPlayed: number;
-  ppg: number;
-  ypg: number;
-  passYpg: number;
-  rushYpg: number;
-  defYpg: number;
-  turnoverMargin: number;
+  currentRank?: number;
 }
 
 export const useStatLeaders = () => {
-  const { currentLeagueId } = useLeague();
-  const [games, setGames] = useState<Game[]>([]);
+  const { currentLeagueId, leagueInfo } = useLeague();
+  const [stats, setStats] = useState<TeamSeasonStats[]>([]);
   const [teams, setTeams] = useState<TeamAssignment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!currentLeagueId) return;
 
-    // Fetch Teams
+    // Fetch Teams for metadata
     const teamsRef = collection(db, 'leagues', currentLeagueId, 'teams');
     const unsubscribeTeams = onSnapshot(teamsRef, (snapshot) => {
       const teamsData = snapshot.docs.map(doc => ({
@@ -37,108 +30,40 @@ export const useStatLeaders = () => {
       setTeams(teamsData);
     });
 
-    // Fetch Final Games
-    const gamesRef = collection(db, 'leagues', currentLeagueId, 'games');
-    const q = query(gamesRef, where('status', '==', 'final'));
-    const unsubscribeGames = onSnapshot(q, (snapshot) => {
-      const gamesData = snapshot.docs.map(doc => ({
+    // Fetch Team Stats for current season
+    const seasonYear = leagueInfo?.currentYear || 2025;
+    const statsRef = collection(db, 'leagues', currentLeagueId, 'team_stats');
+    const q = query(statsRef, where('seasonYear', '==', seasonYear));
+    
+    const unsubscribeStats = onSnapshot(q, (snapshot) => {
+      const statsData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })) as Game[];
-      setGames(gamesData);
+      })) as TeamSeasonStats[];
+      setStats(statsData);
       setLoading(false);
     });
 
     return () => {
       unsubscribeTeams();
-      unsubscribeGames();
+      unsubscribeStats();
     };
-  }, [currentLeagueId]);
+  }, [currentLeagueId, leagueInfo?.currentYear]);
 
   const leaders = useMemo(() => {
     if (teams.length === 0) return [];
 
-    const statsMap: Record<string, {
-      totalPoints: number;
-      totalPassYds: number;
-      totalRushYds: number;
-      totalYdsAllowed: number;
-      takeaways: number;
-      giveaways: number;
-      gp: number;
-    }> = {};
-
-    // Initialize map for all teams
-    teams.forEach(team => {
-      if (team.id) {
-        statsMap[team.id] = {
-          totalPoints: 0,
-          totalPassYds: 0,
-          totalRushYds: 0,
-          totalYdsAllowed: 0,
-          takeaways: 0,
-          giveaways: 0,
-          gp: 0
-        };
-      }
-    });
-
-    // Aggregate game data
-    games.forEach(game => {
-      const homeId = game.homeTeamId;
-      const awayId = game.awayTeamId;
-
-      if (statsMap[homeId]) {
-        const s = statsMap[homeId];
-        s.gp += 1;
-        s.totalPoints += game.homeScore;
-        if (game.homeStats) {
-          s.totalPassYds += game.homeStats.passingYards || 0;
-          s.totalRushYds += game.homeStats.rushingYards || 0;
-          s.giveaways += game.homeStats.turnovers || 0;
-        }
-        if (game.awayStats) {
-          s.totalYdsAllowed += (game.awayStats.passingYards || 0) + (game.awayStats.rushingYards || 0);
-          s.takeaways += game.awayStats.turnovers || 0;
-        }
-      }
-
-      if (statsMap[awayId]) {
-        const s = statsMap[awayId];
-        s.gp += 1;
-        s.totalPoints += game.awayScore;
-        if (game.awayStats) {
-          s.totalPassYds += game.awayStats.passingYards || 0;
-          s.totalRushYds += game.awayStats.rushingYards || 0;
-          s.giveaways += game.awayStats.turnovers || 0;
-        }
-        if (game.homeStats) {
-          s.totalYdsAllowed += (game.homeStats.passingYards || 0) + (game.homeStats.rushingYards || 0);
-          s.takeaways += game.homeStats.turnovers || 0;
-        }
-      }
-    });
-
-    // Calculate final stats
-    return teams.map(team => {
-      const s = statsMap[team.id!];
-      const gp = s?.gp || 0;
-
+    return stats.map(stat => {
+      const team = teams.find(t => t.id === stat.teamId);
       return {
-        teamId: team.id!,
-        name: team.name,
-        logoId: team.logoId,
-        conference: team.conference,
-        gamesPlayed: gp,
-        ppg: gp > 0 ? s.totalPoints / gp : 0,
-        ypg: gp > 0 ? (s.totalPassYds + s.totalRushYds) / gp : 0,
-        passYpg: gp > 0 ? s.totalPassYds / gp : 0,
-        rushYpg: gp > 0 ? s.totalRushYds / gp : 0,
-        defYpg: gp > 0 ? s.totalYdsAllowed / gp : 0,
-        turnoverMargin: gp > 0 ? (s.takeaways - s.giveaways) / gp : 0
-      };
+        ...stat,
+        name: team?.name || 'Unknown Team',
+        logoId: team?.logoId,
+        conference: team?.conference || 'Independent',
+        currentRank: team?.currentRank
+      } as TeamLeaderStats;
     });
-  }, [teams, games]);
+  }, [teams, stats]);
 
   return { leaders, loading };
 };

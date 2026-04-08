@@ -60,8 +60,8 @@ const ScheduleManagement: React.FC = () => {
   // Form State
   const [homeTeamId, setHomeTeamId] = useState('');
   const [awayTeamId, setAwayTeamId] = useState('');
-  const [selectedWeek, setSelectedWeek] = useState<number>(leagueInfo?.currentWeek ?? 1);
-  const [week, setWeek] = useState<number>(leagueInfo?.currentWeek ?? 1);
+  const [selectedWeek, setSelectedWeek] = useState<number>(leagueInfo?.currentWeek ?? 0);
+  const [week, setWeek] = useState<number>(leagueInfo?.currentWeek ?? 0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [showRevertConfirm, setShowRevertConfirm] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -108,7 +108,8 @@ const ScheduleManagement: React.FC = () => {
     const gamesRef = collection(db, 'leagues', currentLeagueId, 'games');
     const q = query(
       gamesRef, 
-      where('week', '==', selectedWeek)
+      where('week', '==', selectedWeek),
+      where('season', '==', leagueInfo?.currentYear || 2025)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -146,13 +147,19 @@ const ScheduleManagement: React.FC = () => {
       const batch = writeBatch(db);
       const teamsRef = collection(db, 'leagues', currentLeagueId, 'teams');
       const gamesRef = collection(db, 'leagues', currentLeagueId, 'games');
+      const playersRef = collection(db, 'leagues', currentLeagueId, 'players');
+      const playerStatsRef = collection(db, 'leagues', currentLeagueId, 'playerStats');
       
       // 1. Get all teams and all final games
       setSyncProgress('Fetching teams data...');
       const teamsSnap = await getDocs(teamsRef);
       
       setSyncProgress('Fetching finalized games...');
-      const finalGamesSnap = await getDocs(query(gamesRef, where('status', '==', 'final')));
+      const finalGamesSnap = await getDocs(query(
+        gamesRef, 
+        where('status', '==', 'final'),
+        where('season', '==', leagueInfo?.currentYear || 2025)
+      ));
       
       const teamRecords: Record<string, { wins: number, losses: number, confWins: number, confLosses: number }> = {};
       
@@ -189,7 +196,42 @@ const ScheduleManagement: React.FC = () => {
         }
       });
       
-      // 3. Update all teams in batch
+      // 3. Sync Player Stats
+      setSyncProgress('Fetching player stats...');
+      const playerStatsSnap = await getDocs(query(
+        playerStatsRef,
+        where('season', '==', leagueInfo?.currentYear || 2025)
+      ));
+
+      const playerAggregates: Record<string, any> = {};
+      
+      setSyncProgress(`Processing ${playerStatsSnap.size} player stat entries...`);
+      playerStatsSnap.docs.forEach(doc => {
+        const stats = doc.data();
+        const pid = stats.playerId;
+        if (!playerAggregates[pid]) {
+          playerAggregates[pid] = {
+            seasonPassYds: 0, seasonPassTDs: 0, seasonPassInts: 0,
+            seasonRushYds: 0, seasonRushTDs: 0,
+            seasonRecYds: 0, seasonRecTDs: 0, seasonReceptions: 0,
+            seasonTackles: 0, seasonSacks: 0, seasonInts: 0
+          };
+        }
+        
+        playerAggregates[pid].seasonPassYds += (stats.passYds || 0);
+        playerAggregates[pid].seasonPassTDs += (stats.passTDs || 0);
+        playerAggregates[pid].seasonPassInts += (stats.passInts || 0);
+        playerAggregates[pid].seasonRushYds += (stats.rushYds || 0);
+        playerAggregates[pid].seasonRushTDs += (stats.rushTDs || 0);
+        playerAggregates[pid].seasonRecYds += (stats.recYds || 0);
+        playerAggregates[pid].seasonRecTDs += (stats.recTDs || 0);
+        playerAggregates[pid].seasonReceptions += (stats.receptions || 0);
+        playerAggregates[pid].seasonTackles += (stats.tackles || 0);
+        playerAggregates[pid].seasonSacks += (stats.sacks || 0);
+        playerAggregates[pid].seasonInts += (stats.ints || 0);
+      });
+
+      // 4. Update all teams in batch
       setSyncProgress(`Updating ${Object.keys(teamRecords).length} team records...`);
       Object.entries(teamRecords).forEach(([teamId, records]) => {
         const teamRef = doc(db, 'leagues', currentLeagueId, 'teams', teamId);
@@ -198,8 +240,27 @@ const ScheduleManagement: React.FC = () => {
           updatedAt: serverTimestamp()
         });
       });
+
+      // 5. Update all players in batch (careful with 500 limit)
+      setSyncProgress(`Updating ${Object.keys(playerAggregates).length} player records...`);
+      let opCount = Object.keys(teamRecords).length;
+      let currentBatch = batch;
       
-      await batch.commit();
+      for (const [pid, stats] of Object.entries(playerAggregates)) {
+        if (opCount >= 490) {
+          await currentBatch.commit();
+          currentBatch = writeBatch(db);
+          opCount = 0;
+        }
+        const playerRef = doc(db, 'leagues', currentLeagueId, 'players', pid);
+        currentBatch.update(playerRef, {
+          ...stats,
+          updatedAt: serverTimestamp()
+        });
+        opCount++;
+      }
+      
+      await currentBatch.commit();
       setSyncStep('success');
     } catch (err) {
       console.error("Error syncing standings:", err);
@@ -386,6 +447,8 @@ const ScheduleManagement: React.FC = () => {
           week,
           homeTeamId,
           awayTeamId,
+          homeTeamName: homeTeam?.name || homeTeamId,
+          awayTeamName: awayTeam?.name || awayTeamId,
           isUvU,
           updatedAt: serverTimestamp()
         });
@@ -396,12 +459,15 @@ const ScheduleManagement: React.FC = () => {
           week,
           homeTeamId,
           awayTeamId,
+          homeTeamName: homeTeam?.name || homeTeamId,
+          awayTeamName: awayTeam?.name || awayTeamId,
           homeScore: 0,
           awayScore: 0,
           isUvU,
           status: 'scheduled',
           leagueId: currentLeagueId,
-          season: leagueInfo?.currentYear || 2024,
+          season: leagueInfo?.currentYear || 2025,
+          createdBy: user?.uid || 'system',
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
@@ -537,7 +603,7 @@ const ScheduleManagement: React.FC = () => {
     try {
       const leagueRef = doc(db, 'leagues', currentLeagueId!);
       await updateDoc(leagueRef, {
-        currentWeek: (leagueInfo?.currentWeek || 1) + 1,
+        currentWeek: (leagueInfo?.currentWeek ?? 0) + 1,
         updatedAt: serverTimestamp()
       });
 
@@ -547,10 +613,10 @@ const ScheduleManagement: React.FC = () => {
         leagueId: currentLeagueId!,
         type: 'league_event',
         title: 'Week Advanced',
-        description: `The Commissioner has advanced the league to Week ${(leagueInfo?.currentWeek || 1) + 1}`,
+        description: `The Commissioner has advanced the league to Week ${(leagueInfo?.currentWeek ?? 0) + 1}`,
         timestamp: serverTimestamp(),
         metadata: {
-          week: (leagueInfo?.currentWeek || 1) + 1,
+          week: (leagueInfo?.currentWeek ?? 0) + 1,
           season: leagueInfo?.currentYear,
           isHumanInvolved: true // Commissioner is human
         }
@@ -597,7 +663,7 @@ const ScheduleManagement: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div className="space-y-1">
             <h2 className="text-lg font-bold text-white">Advance to Next Week</h2>
-            <p className="text-sm text-zinc-500">Move the entire league to Week {(leagueInfo?.currentWeek || 1) + 1}.</p>
+            <p className="text-sm text-zinc-500">Move the entire league to Week {(leagueInfo?.currentWeek ?? 0) + 1}.</p>
           </div>
           <button
             onClick={() => setShowAdvanceConfirm(true)}
@@ -729,8 +795,8 @@ const ScheduleManagement: React.FC = () => {
 
       {/* Week Selector */}
       <div className="flex items-center gap-2 overflow-x-auto pb-4 no-scrollbar">
-        {[...Array(16)].map((_, i) => {
-          const w = i + 1;
+        {[...Array(17)].map((_, i) => {
+          const w = i;
           return (
             <button
               key={w}
@@ -971,7 +1037,7 @@ const ScheduleManagement: React.FC = () => {
                 <div className="space-y-2">
                   <h3 className="text-2xl font-black text-white">Advance Week?</h3>
                   <p className="text-zinc-400">
-                    Are you sure? This will move the whole league to <span className="text-white font-bold">Week {(leagueInfo?.currentWeek ?? 1) + 1}</span>. 
+                    Are you sure? This will move the whole league to <span className="text-white font-bold">Week {(leagueInfo?.currentWeek ?? 0) + 1}</span>. 
                     This action cannot be undone.
                   </p>
                 </div>
@@ -1091,6 +1157,7 @@ const ScheduleManagement: React.FC = () => {
           leagueId={currentLeagueId}
           userTeamId={userTeam?.id || ''}
           isAdmin={true}
+          quarterLength={leagueInfo?.settings?.quarterLength}
         />
       )}
     </div>

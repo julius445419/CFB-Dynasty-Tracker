@@ -9,7 +9,6 @@ import {
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LeagueProvider, useLeague } from './context/LeagueContext';
 import { AppLayout } from './components/AppLayout';
-import { LeagueConfig } from './components/LeagueConfig';
 import { LeagueSettings } from './pages/LeagueSettings';
 import { Schools } from './components/Schools';
 import { Login } from './pages/Login';
@@ -24,10 +23,14 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import CreateShadowCoach from './pages/admin/CreateShadowCoach';
 import MatchupHub from './pages/MatchupHub';
 import ScheduleManagement from './pages/admin/ScheduleManagement';
-import { NationalHub } from './pages/NationalHub';
+import ManageCoaches from './pages/admin/ManageCoaches';
+import { ManagePolls } from './pages/admin/ManagePolls';
+import { Programs } from './pages/Programs';
 import { Standings } from './pages/Standings';
 import { StatLeaders } from './pages/StatLeaders';
 import { SchoolHome } from './pages/SchoolHome';
+import { LeagueHub } from './pages/LeagueHub';
+import { Polls } from './pages/Polls';
 import { MyBoard } from './pages/MyBoard';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleGate } from './components/RoleGate';
@@ -72,10 +75,12 @@ export default function App() {
               <Route path="team" element={<MyTeam />} />
               <Route path="team/recruiting" element={<MyBoard />} />
               <Route path="teams/:teamId" element={<MyTeam />} />
-              <Route path="national-hub" element={<NationalHub />} />
+              <Route path="league" element={<LeagueHub />} />
+              <Route path="programs" element={<Programs />} />
               <Route path="standings" element={<Standings />} />
               <Route path="leaders" element={<StatLeaders />} />
               <Route path="matchups" element={<MatchupHub />} />
+              <Route path="polls" element={<Polls />} />
               <Route path="school/:schoolId" element={<SchoolHome />} />
               <Route path="admin" element={
                 <RoleGate allowedRoles={['Owner', 'Commissioner']}>
@@ -98,9 +103,19 @@ export default function App() {
                   <PendingRequests />
                 </RoleGate>
               } />
+              <Route path="admin/coaches" element={
+                <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                  <ManageCoaches />
+                </RoleGate>
+              } />
               <Route path="admin/schedule" element={
                 <RoleGate allowedRoles={['Owner', 'Commissioner']}>
                   <ScheduleManagement />
+                </RoleGate>
+              } />
+              <Route path="admin/polls" element={
+                <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                  <ManagePolls />
                 </RoleGate>
               } />
               <Route path="*" element={<PlaceholderPage title="Not Found" />} />

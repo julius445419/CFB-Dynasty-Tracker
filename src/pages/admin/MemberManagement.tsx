@@ -32,7 +32,7 @@ import {
   Link as LinkIcon
 } from 'lucide-react';
 import { SCHOOLS } from '../../constants/schools';
-import { TeamAssignment } from '../../types';
+import { TeamAssignment, CarouselCoach } from '../../types';
 
 interface Member {
   id: string;
@@ -51,6 +51,7 @@ export const MemberManagement: React.FC = () => {
   const { currentLeagueId, userRole, userTeam } = useLeague();
   const [members, setMembers] = useState<Member[]>([]);
   const [shadowCoaches, setShadowCoaches] = useState<TeamAssignment[]>([]);
+  const [availableCoaches, setAvailableCoaches] = useState<CarouselCoach[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Modals
@@ -184,6 +185,12 @@ export const MemberManagement: React.FC = () => {
           }
         });
 
+        // 5. Get available coaches
+        const coachesRef = collection(db, 'coaches');
+        const coachesSnap = await getDocs(query(coachesRef, where('leagueId', '==', currentLeagueId)));
+        const coachesData = coachesSnap.docs.map(d => ({ id: d.id, ...d.data() } as CarouselCoach));
+        setAvailableCoaches(coachesData);
+
         const combinedMembers = memberData.map((m) => ({
           id: m.id,
           displayName: userProfiles[m.id]?.displayName || m.displayName || 'Unknown User',
@@ -276,7 +283,18 @@ export const MemberManagement: React.FC = () => {
     try {
       const batch = writeBatch(db);
 
-      // 1. Update Shadow Coach document
+      // 1. Unlink user from any previous team they might have had
+      const teamsRef = collection(db, 'leagues', currentLeagueId, 'teams');
+      const userTeamsSnap = await getDocs(query(teamsRef, where('ownerId', '==', targetUser.id)));
+      userTeamsSnap.forEach(teamDoc => {
+        batch.update(teamDoc.ref, { 
+          ownerId: 'cpu', 
+          isPlaceholder: false,
+          updatedAt: serverTimestamp() 
+        });
+      });
+
+      // 2. Update Shadow Coach document to be owned by this user
       const coachRef = doc(db, 'leagues', currentLeagueId, 'teams', selectedShadowCoach.id!);
       batch.update(coachRef, {
         ownerId: targetUser.id,
@@ -284,7 +302,7 @@ export const MemberManagement: React.FC = () => {
         updatedAt: serverTimestamp()
       });
 
-      // 2. Update member role to 'player' if it was 'unassigned'
+      // 3. Update member role to 'player' if it was 'unassigned'
       const memberRef = doc(db, 'leagues', currentLeagueId, 'members', targetUser.id);
       batch.update(memberRef, {
         role: 'player'
@@ -307,6 +325,83 @@ export const MemberManagement: React.FC = () => {
       alert("Failed to link account.");
     } finally {
       setLinking(false);
+    }
+  };
+
+  const handleLinkCoachPersona = async (userId: string, coachId: string | null) => {
+    if (!currentLeagueId) return;
+    
+    try {
+      const batch = writeBatch(db);
+      
+      // 1. Clear any existing link for this user in coaches collection
+      const existingCoach = availableCoaches.find(c => c.userId === userId);
+      if (existingCoach) {
+        const existingCoachRef = doc(db, 'coaches', existingCoach.id);
+        batch.update(existingCoachRef, { userId: null, updatedAt: serverTimestamp() });
+        
+        // Also clear the ownerId on the team document if it was linked to this user
+        if (existingCoach.teamId) {
+          const teamRef = doc(db, 'leagues', currentLeagueId, 'teams', existingCoach.teamId);
+          batch.update(teamRef, { 
+            ownerId: 'cpu', 
+            isPlaceholder: false,
+            updatedAt: serverTimestamp() 
+          });
+        }
+      }
+      
+      // 2. Clear any existing team ownership for this user in teams collection
+      const teamsRef = collection(db, 'leagues', currentLeagueId, 'teams');
+      const userTeamsSnap = await getDocs(query(teamsRef, where('ownerId', '==', userId)));
+      userTeamsSnap.forEach(teamDoc => {
+        batch.update(teamDoc.ref, { 
+          ownerId: 'cpu', 
+          isPlaceholder: false,
+          updatedAt: serverTimestamp() 
+        });
+      });
+      
+      // 3. Set new link for the coach persona
+      if (coachId) {
+        const newCoach = availableCoaches.find(c => c.id === coachId);
+        
+        // Clear any existing user link on this coach persona (if it was linked to someone else)
+        if (newCoach && newCoach.userId && newCoach.userId !== userId) {
+          // This is implicitly handled by the update below, but we should be aware
+        }
+        
+        const coachRef = doc(db, 'coaches', coachId);
+        batch.update(coachRef, { userId: userId, updatedAt: serverTimestamp() });
+        
+        // 4. Update the ownerId on the team document associated with this coach
+        if (newCoach && newCoach.teamId) {
+          const teamRef = doc(db, 'leagues', currentLeagueId, 'teams', newCoach.teamId);
+          batch.update(teamRef, { 
+            ownerId: userId, 
+            isPlaceholder: false,
+            updatedAt: serverTimestamp() 
+          });
+        }
+      }
+      
+      await batch.commit();
+      
+      // Update local state
+      setAvailableCoaches(prev => prev.map(c => {
+        // Clear previous link for this user
+        if (c.userId === userId) return { ...c, userId: undefined };
+        // Set new link
+        if (c.id === coachId) return { ...c, userId: userId };
+        return c;
+      }));
+      
+      // Refresh members to show updated team info
+      // (In a real app, we might want to trigger a full refresh or update state more precisely)
+      
+    } catch (error) {
+      console.error("Error linking coach persona:", error);
+      alert("Failed to link coach persona.");
     }
   };
 
@@ -371,6 +466,26 @@ export const MemberManagement: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Coach Persona Linker for Shadow Coach */}
+                  <div className="flex flex-col gap-1 min-w-[180px] mr-2">
+                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1 flex items-center gap-1">
+                      <LinkIcon size={10} />
+                      Linked Persona
+                    </label>
+                    <select 
+                      value={availableCoaches.find(c => c.userId === sc.id)?.id || ''}
+                      onChange={(e) => handleLinkCoachPersona(sc.id!, e.target.value || null)}
+                      className="w-full bg-zinc-800/50 border border-zinc-700 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-300 focus:outline-none focus:ring-1 focus:ring-orange-600/50 appearance-none cursor-pointer hover:border-zinc-600 transition-all"
+                    >
+                      <option value="">None / Unassigned</option>
+                      {availableCoaches.map(coach => (
+                        <option key={coach.id} value={coach.id}>
+                          {coach.name} ({coach.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {!sc.inviteCode && (
                     <button
                       onClick={() => generateInviteCode(sc.id!)}
@@ -458,17 +573,39 @@ export const MemberManagement: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={() => handleOpenAssign(member)}
-                className={`px-6 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
-                  member.team 
-                    ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700' 
-                    : 'bg-orange-600 text-white shadow-lg shadow-orange-600/20 hover:bg-orange-700'
-                }`}
-              >
-                {member.team ? 'Manage Coach' : 'Assign Coach'}
-                <ChevronRight size={16} />
-              </button>
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                {/* Coach Persona Linker */}
+                <div className="flex flex-col gap-1 min-w-[200px]">
+                  <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1 flex items-center gap-1">
+                    <LinkIcon size={10} />
+                    Linked Coach Persona
+                  </label>
+                  <select 
+                    value={availableCoaches.find(c => c.userId === member.id)?.id || ''}
+                    onChange={(e) => handleLinkCoachPersona(member.id, e.target.value || null)}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-orange-600/50 appearance-none cursor-pointer hover:border-zinc-600 transition-all"
+                  >
+                    <option value="">None / Unassigned</option>
+                    {availableCoaches.map(coach => (
+                      <option key={coach.id} value={coach.id}>
+                        {coach.name} ({coach.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => handleOpenAssign(member)}
+                  className={`px-6 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                    member.team 
+                      ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700' 
+                      : 'bg-orange-600 text-white shadow-lg shadow-orange-600/20 hover:bg-orange-700'
+                  }`}
+                >
+                  {member.team ? 'Manage Coach' : 'Assign Coach'}
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -723,7 +860,7 @@ export const MemberManagement: React.FC = () => {
                         >
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center p-1">
-                              <img src={`https://a.espncdn.com/i/teamlogos/ncaa/500/${school.logoId}.png`} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                              <img src={`https://a.espncdn.com/i/teamlogos/ncaa/500/${school.logoId}.png`} alt="" className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" referrerPolicy="no-referrer" />
                             </div>
                             <div className="text-left">
                               <p className="text-white font-bold text-sm">{school.name}</p>

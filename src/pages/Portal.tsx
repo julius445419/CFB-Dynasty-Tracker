@@ -67,8 +67,8 @@ export const Portal: React.FC = () => {
             name: data.name,
             ownerId: data.ownerId,
             platform: data.platform,
-            currentYear: data.currentYear || 2024,
-            currentWeek: data.currentWeek || 1,
+            currentYear: data.currentYear || 2025,
+            currentWeek: data.currentWeek || 0,
             role: 'Owner'
           });
         });
@@ -97,8 +97,8 @@ export const Portal: React.FC = () => {
                 name: data.name,
                 ownerId: data.ownerId,
                 platform: data.platform,
-                currentYear: data.currentYear || 2024,
-                currentWeek: data.currentWeek || 1,
+                currentYear: data.currentYear || 2025,
+                currentWeek: data.currentWeek || 0,
                 role: memberData.role === 'owner' ? 'Owner' : 'Player',
                 school: teamData?.school
               });
@@ -125,8 +125,8 @@ export const Portal: React.FC = () => {
                 name: data.name,
                 ownerId: data.ownerId,
                 platform: data.platform,
-                currentYear: data.currentYear || 2024,
-                currentWeek: data.currentWeek || 1,
+                currentYear: data.currentYear || 2025,
+                currentWeek: data.currentWeek || 0,
                 role: 'Player',
                 school: teamData.school
               });
@@ -145,8 +145,8 @@ export const Portal: React.FC = () => {
               name: data.name,
               ownerId: data.ownerId,
               platform: data.platform,
-              currentYear: data.currentYear || 2024,
-              currentWeek: data.currentWeek || 1,
+              currentYear: data.currentYear || 2025,
+              currentWeek: data.currentWeek || 0,
               role: 'Player'
             });
           }

@@ -46,8 +46,8 @@ export const CreateLeagueModal: React.FC<CreateLeagueModalProps> = ({ isOpen, on
         ownerId: user.uid,
         ownerEmail: user.email,
         createdAt: serverTimestamp(),
-        currentYear: 2024,
-        currentWeek: 1,
+        currentYear: 2025,
+        currentWeek: 0,
         seasonPhase: 'Off Season',
         commissioners: [user.uid]
       };

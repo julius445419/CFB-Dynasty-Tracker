@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Home, Users, Sword, Settings, Menu, LogOut, Trophy, Globe, Activity } from 'lucide-react';
+import { Home, Users, Sword, Settings, Menu, LogOut, Trophy, Globe, Activity, Shield } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -19,11 +19,20 @@ export const AppLayout: React.FC = () => {
 
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
-    { icon: Globe, label: 'Directory', path: '/national-hub' },
-    { icon: Trophy, label: 'Standings', path: '/standings' },
-    { icon: Activity, label: 'Leaders', path: '/leaders' },
-    { icon: Users, label: 'My Team', path: userTeam ? `/school/${userTeam.id}` : '/team' },
+    { icon: Shield, label: 'My Team', path: userTeam ? `/school/${userTeam.id}` : '/team' },
     { icon: Sword, label: 'Matchups', path: '/matchups' },
+    { icon: Trophy, label: 'League', path: '/league' },
+    { icon: Settings, label: 'Admin', path: '/admin' },
+  ];
+
+  const desktopNavItems = [
+    { icon: Home, label: 'Home', path: '/' },
+    { icon: Shield, label: 'My Team', path: userTeam ? `/school/${userTeam.id}` : '/team' },
+    { icon: Sword, label: 'Matchups', path: '/matchups' },
+    { icon: Trophy, label: 'League Hub', path: '/league' },
+    { icon: Globe, label: 'Programs', path: '/programs' },
+    { icon: Activity, label: 'Standings', path: '/standings' },
+    { icon: Activity, label: 'Leaders', path: '/leaders' },
     { icon: Settings, label: 'Admin', path: '/admin' },
   ];
 
@@ -49,7 +58,7 @@ export const AppLayout: React.FC = () => {
           </div>
         </div>
         <nav className="flex-1 space-y-1 p-4">
-          {navItems.map((item) => {
+          {desktopNavItems.map((item) => {
             const link = (
               <NavLink
                 key={item.path}
@@ -113,36 +122,34 @@ export const AppLayout: React.FC = () => {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-20 items-center justify-start overflow-x-auto no-scrollbar border-t border-zinc-900 bg-zinc-950/90 backdrop-blur-xl px-4 md:hidden">
-        <div className="flex items-center gap-1 min-w-full">
-          {navItems.map((item) => {
-            const link = (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) =>
-                  cn(
-                    'flex flex-col items-center justify-center space-y-1 px-5 py-2 transition-all rounded-xl flex-shrink-0 min-w-[72px]',
-                    isActive ? 'text-orange-500 bg-orange-500/5' : 'text-zinc-500 hover:text-zinc-300'
-                  )
-                }
-              >
-                <item.icon className="h-5 w-5" />
-                <span className="text-[9px] font-black uppercase tracking-widest">{item.label}</span>
-              </NavLink>
+      <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-20 items-center justify-around border-t border-zinc-900 bg-zinc-950/90 backdrop-blur-xl px-2 md:hidden">
+        {navItems.map((item) => {
+          const link = (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                cn(
+                  'flex flex-col items-center justify-center space-y-1 py-2 transition-all rounded-xl flex-1 min-w-0',
+                  isActive ? 'text-orange-500 bg-orange-500/5' : 'text-zinc-500 hover:text-zinc-300'
+                )
+              }
+            >
+              <item.icon className="h-5 w-5" />
+              <span className="text-[8px] font-black uppercase tracking-widest truncate w-full text-center">{item.label}</span>
+            </NavLink>
+          );
+
+          if (item.label === 'Admin') {
+            return (
+              <RoleGate key={item.path} allowedRoles={['Owner', 'Commissioner']}>
+                {link}
+              </RoleGate>
             );
+          }
 
-            if (item.label === 'Admin') {
-              return (
-                <RoleGate key={item.path} allowedRoles={['Owner', 'Commissioner']}>
-                  {link}
-                </RoleGate>
-              );
-            }
-
-            return link;
-          })}
-        </div>
+          return link;
+        })}
       </nav>
     </div>
   );

@@ -78,7 +78,7 @@ export const EditCoachModal: React.FC<EditCoachModalProps> = ({ isOpen, onClose,
         <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-black text-white uppercase tracking-tight italic">Edit Coaching Schemes</h2>
-            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Coach {team.coachName}</p>
+            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{team.name} Dynasty</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-500 hover:text-white">
             <X size={20} />

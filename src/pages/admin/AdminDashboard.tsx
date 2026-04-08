@@ -5,8 +5,10 @@ import { motion } from 'motion/react';
 import { collection, getDocs, query, where, addDoc, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import { SCHOOLS } from '../../constants/schools';
+import { useLeague } from '../../context/LeagueContext';
 
 const AdminDashboard: React.FC = () => {
+  const { leagueInfo } = useLeague();
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedStatus, setSeedStatus] = useState<{ type: 'success' | 'error' | 'idle', message: string }>({ type: 'idle', message: '' });
 
@@ -100,6 +102,14 @@ const AdminDashboard: React.FC = () => {
       bg: 'bg-blue-500/10'
     },
     {
+      title: 'Manage Coaches',
+      description: 'Standalone database for the Coaching Carousel.',
+      icon: UserPlus,
+      path: '/admin/coaches',
+      color: 'text-orange-600',
+      bg: 'bg-orange-600/10'
+    },
+    {
       title: 'Shadow Coaches',
       description: 'Create placeholder entries for human coaches.',
       icon: UserPlus,
@@ -122,6 +132,14 @@ const AdminDashboard: React.FC = () => {
       path: '/admin/schedule',
       color: 'text-purple-500',
       bg: 'bg-purple-500/10'
+    },
+    {
+      title: 'Manage Polls',
+      description: 'Update weekly Top 25 rankings (Media, Coaches, CFP).',
+      icon: Trophy,
+      path: '/admin/polls',
+      color: 'text-yellow-500',
+      bg: 'bg-yellow-500/10'
     },
     {
       title: 'League Settings',
@@ -296,7 +314,7 @@ const AdminDashboard: React.FC = () => {
           </div>
           <div className="bg-zinc-950 p-4 rounded-2xl border border-zinc-900">
             <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-1">Season Year</p>
-            <p className="text-2xl font-black text-white">2024</p>
+            <p className="text-2xl font-black text-white">{leagueInfo?.currentYear || 2025}</p>
           </div>
         </div>
       </div>

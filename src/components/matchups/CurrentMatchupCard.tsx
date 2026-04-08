@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Trophy, Calendar, Gamepad2, ChevronRight, Pencil, CheckCircle2 } from 'lucide-react';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { Game, TeamAssignment } from '../../types';
+import { Game, TeamAssignment, League } from '../../types';
 import { getTeamLogo } from '../../utils/teamAssets';
 import { TeamLogo } from '../common/TeamLogo';
 import { useNavigate } from 'react-router-dom';
@@ -14,9 +14,10 @@ interface CurrentMatchupCardProps {
   currentWeek: number;
   userTeamId: string;
   isCommissioner?: boolean;
+  leagueInfo?: League | null;
 }
 
-export const CurrentMatchupCard: React.FC<CurrentMatchupCardProps> = ({ leagueId, currentWeek, userTeamId, isCommissioner }) => {
+export const CurrentMatchupCard: React.FC<CurrentMatchupCardProps> = ({ leagueId, currentWeek, userTeamId, isCommissioner, leagueInfo }) => {
   const [game, setGame] = useState<Game | null>(null);
   const [homeTeam, setHomeTeam] = useState<TeamAssignment | null>(null);
   const [awayTeam, setAwayTeam] = useState<TeamAssignment | null>(null);
@@ -31,12 +32,17 @@ export const CurrentMatchupCard: React.FC<CurrentMatchupCardProps> = ({ leagueId
     const gamesRef = collection(db, 'leagues', leagueId, 'games');
     
     // We need to find a game where week matches AND user is home OR away
-    const q = query(gamesRef, where('week', '==', currentWeek));
+    const q = query(
+      gamesRef, 
+      where('week', '==', currentWeek)
+    );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       const userGameDoc = snapshot.docs.find(doc => {
         const data = doc.data();
-        return data.homeTeamId === userTeamId || data.awayTeamId === userTeamId;
+        const isUserTeam = data.homeTeamId === userTeamId || data.awayTeamId === userTeamId;
+        const isCurrentSeason = !data.season || data.season === (leagueInfo?.currentYear || 2025);
+        return isUserTeam && isCurrentSeason;
       });
 
       if (userGameDoc) {
@@ -63,7 +69,7 @@ export const CurrentMatchupCard: React.FC<CurrentMatchupCardProps> = ({ leagueId
     });
 
     return () => unsubscribe();
-  }, [leagueId, currentWeek, userTeamId]);
+  }, [leagueId, currentWeek, userTeamId, leagueInfo?.currentYear]);
 
   if (loading) {
     return (
@@ -231,6 +237,7 @@ export const CurrentMatchupCard: React.FC<CurrentMatchupCardProps> = ({ leagueId
         awayTeam={awayTeam}
         leagueId={leagueId}
         userTeamId={userTeamId}
+        quarterLength={leagueInfo?.settings?.quarterLength}
       />
     </>
   );

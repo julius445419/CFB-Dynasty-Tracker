@@ -14,13 +14,20 @@ interface SchoolCardProps {
     coachName?: string;
     ownerId?: string;
     isPlaceholder?: boolean;
+    wins?: number;
+    losses?: number;
+    currentRank?: number;
   };
   onClick: () => void;
 }
 
 export const SchoolCard: React.FC<SchoolCardProps> = ({ school, coach, onClick }) => {
   const getCoachStatus = () => {
-    if (coach?.ownerId && !coach.isPlaceholder) {
+    const isUserControlled = coach?.ownerId && coach.ownerId !== 'cpu' && !coach.isPlaceholder;
+    const hasCoachName = !!coach?.coachName;
+    const isShadow = coach?.isPlaceholder && !isUserControlled && !hasCoachName;
+
+    if (isUserControlled) {
       return (
         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 text-green-500 text-[10px] font-black uppercase tracking-widest rounded-lg border border-green-500/20">
           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -29,7 +36,8 @@ export const SchoolCard: React.FC<SchoolCardProps> = ({ school, coach, onClick }
         </div>
       );
     }
-    if (coach?.isPlaceholder) {
+    
+    if (isShadow) {
       return (
         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800 text-zinc-400 text-[10px] font-black uppercase tracking-widest rounded-lg border border-zinc-700">
           <Ghost size={12} />
@@ -37,9 +45,11 @@ export const SchoolCard: React.FC<SchoolCardProps> = ({ school, coach, onClick }
         </div>
       );
     }
+
+    // CPU Case (includes non-user teams with assigned coaches)
     return (
       <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/50 text-zinc-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-zinc-800">
-        CPU
+        {hasCoachName ? `CPU: ${coach.coachName}` : 'CPU'}
       </div>
     );
   };
@@ -56,7 +66,7 @@ export const SchoolCard: React.FC<SchoolCardProps> = ({ school, coach, onClick }
       {/* Record Badge */}
       <div className="absolute top-4 right-4 flex items-center gap-1 text-[10px] font-black text-zinc-600 uppercase tracking-widest">
         <Trophy size={10} />
-        0-0
+        {coach?.wins || 0}-{coach?.losses || 0}
       </div>
 
       <div className="flex flex-col items-center text-center space-y-4">
@@ -70,6 +80,9 @@ export const SchoolCard: React.FC<SchoolCardProps> = ({ school, coach, onClick }
 
         <div className="space-y-1">
           <h3 className="text-lg font-black text-white uppercase tracking-tight leading-tight group-hover:text-orange-500 transition-colors">
+            {coach?.currentRank && (
+              <span className="text-orange-600 mr-1.5">#{coach.currentRank}</span>
+            )}
             {school.name}
           </h3>
           <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">
