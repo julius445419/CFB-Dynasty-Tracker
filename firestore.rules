@@ -96,9 +96,12 @@ service cloud.firestore {
     }
 
     function isValidTeam(data) {
-      return data.name is string &&
-             data.leagueId is string &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp);
+      return (!('name' in data) || data.name is string) &&
+             (!('leagueId' in data) || data.leagueId is string) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp) &&
+             (!('stadiumName' in data) || data.stadiumName is string) &&
+             (!('city' in data) || data.city is string) &&
+             (!('state' in data) || data.state is string);
     }
 
     function isValidCoach(data) {

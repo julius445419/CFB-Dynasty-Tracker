@@ -80,7 +80,7 @@ export const Programs: React.FC = () => {
   }, [searchQuery, selectedConference]);
 
   const getCoachForSchool = (schoolName: string) => {
-    const team = teams.find(t => (t.school || t.name) === schoolName);
+    const team = teams.find(t => t.name === schoolName);
     if (!team) return null;
 
     // If team has a relational head coach, use that

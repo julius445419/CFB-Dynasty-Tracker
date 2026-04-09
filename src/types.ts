@@ -77,6 +77,9 @@ export interface TeamAssignment {
   headCoachId?: string;
   ocId?: string;
   dcId?: string;
+  stadiumName?: string;
+  city?: string;
+  state?: string;
 }
 
 export interface Player {
@@ -139,6 +142,11 @@ export interface TeamStats {
   interceptionsThrown?: number;
   penalties?: number;
   penaltyYards?: number;
+  q1?: number;
+  q2?: number;
+  q3?: number;
+  q4?: number;
+  ot?: number;
 }
 
 export interface Game {

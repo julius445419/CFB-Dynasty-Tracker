@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, Users, LayoutGrid, BarChart3, Settings, Shield, Loader2, Sparkles, ChevronRight, Calendar, ArrowLeft } from 'lucide-react';
+import { Trophy, Users, LayoutGrid, BarChart3, Settings, Shield, Loader2, Sparkles, ChevronRight, Calendar, ArrowLeft, MapPin, Building2 } from 'lucide-react';
 import { useLeague } from '../context/LeagueContext';
 import { getTeamColor } from '../utils/teamAssets';
 import { TeamLogo } from '../components/common/TeamLogo';
@@ -154,7 +154,7 @@ export const MyTeam: React.FC = () => {
     );
   }
 
-  const teamColor = getTeamColor(targetTeam.school || targetTeam.name);
+  const teamColor = getTeamColor(targetTeam.name);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white selection:bg-orange-600/30">
@@ -183,7 +183,7 @@ export const MyTeam: React.FC = () => {
           </div>
           <div>
             <h1 className="text-3xl font-black tracking-tighter uppercase flex flex-wrap items-baseline gap-3">
-              {targetTeam.school || targetTeam.name}
+              {targetTeam.name}
               {headCoach && (
                 <span className="text-orange-500 text-xl italic lowercase first-letter:uppercase">
                   Coach {headCoach.name}
@@ -261,6 +261,33 @@ export const MyTeam: React.FC = () => {
 
               <CoachCard team={targetTeam} isEditable={!isReadOnly} />
 
+              {/* Program Details Section */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <Building2 size={120} className="text-white" />
+                </div>
+                
+                <h3 className="text-sm font-black text-white mb-6 flex items-center gap-2 relative z-10">
+                  <MapPin size={16} className="text-orange-500" /> 
+                  Program Details
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Home Stadium</p>
+                    <p className="text-lg font-black text-white italic uppercase tracking-tight">
+                      {targetTeam.stadiumName || 'Stadium TBD'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Location</p>
+                    <p className="text-lg font-black text-white italic uppercase tracking-tight">
+                      {targetTeam.city && targetTeam.state ? `${targetTeam.city}, ${targetTeam.state}` : 'Location TBD'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <StatHub team={targetTeam} games={games} />
 
               {/* Recruiting Snapshot */}
@@ -332,7 +359,7 @@ export const MyTeam: React.FC = () => {
       <AddMatchupModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        prefillHomeTeam={targetTeam.school || targetTeam.name}
+        prefillHomeTeam={targetTeam.name}
       />
     </div>
   );

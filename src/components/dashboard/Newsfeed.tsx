@@ -3,7 +3,8 @@ import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestor
 import { db } from '../../firebase';
 import { ActivityLog } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, UserPlus, Calendar, Clock, ChevronRight } from 'lucide-react';
+import { ChevronRight, Zap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface NewsfeedProps {
   leagueId: string;
@@ -13,11 +14,13 @@ interface NewsfeedProps {
 export const Newsfeed: React.FC<NewsfeedProps> = ({ leagueId, userTeamId }) => {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!leagueId) return;
 
     const logsRef = collection(db, 'leagues', leagueId, 'activity_logs');
+    // Fetch 15 to allow for prioritization, but we only display 5
     const q = query(logsRef, orderBy('timestamp', 'desc'), limit(15));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -44,7 +47,7 @@ export const Newsfeed: React.FC<NewsfeedProps> = ({ leagueId, userTeamId }) => {
         return 0; // Maintain firestore's timestamp sort
       });
 
-      setLogs(prioritizedLogs);
+      setLogs(prioritizedLogs.slice(0, 5));
       setLoading(false);
     });
 
@@ -64,86 +67,130 @@ export const Newsfeed: React.FC<NewsfeedProps> = ({ leagueId, userTeamId }) => {
     return date.toLocaleDateString();
   };
 
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'game_result': return <Trophy className="w-4 h-4 text-orange-500" />;
-      case 'recruiting_commit': return <UserPlus className="w-4 h-4 text-blue-500" />;
-      case 'league_event': return <Calendar className="w-4 h-4 text-green-500" />;
-      default: return <Clock className="w-4 h-4 text-zinc-500" />;
+  const transformLogToHeadline = (log: ActivityLog) => {
+    const { type, title, description } = log;
+    
+    let headline = title;
+    let category = 'NEWS';
+    let colorClass = 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20';
+    let targetPath = '/activity';
+
+    if (type === 'game_result') {
+      category = 'FINAL SCORE';
+      colorClass = 'bg-orange-500/10 text-orange-500 border-orange-500/20';
+      targetPath = '/schedule';
+      if (title.includes('Results Processed')) {
+        const teamName = title.replace(' Results Processed', '');
+        headline = `${teamName.toUpperCase()} REPORT: Results are in as the conference race heats up.`;
+      } else if (description.toLowerCase().includes('upset') || description.toLowerCase().includes('defeated')) {
+        category = 'UPSET';
+        colorClass = 'bg-red-500/10 text-red-500 border-red-500/20';
+        headline = `SHOCKER: ${description.toUpperCase()}`;
+      }
+    } else if (type === 'recruiting_commit') {
+      category = 'RECRUITING';
+      colorClass = 'bg-blue-500/10 text-blue-500 border-blue-500/20';
+      targetPath = '/recruiting';
+      headline = `BIG COMMIT: ${description}`;
+    } else if (type === 'league_event' || title.toLowerCase().includes('advanced')) {
+      category = 'SCHEDULE';
+      colorClass = 'bg-green-500/10 text-green-500 border-green-500/20';
+      targetPath = '/schedule';
+      if (title.toLowerCase().includes('advanced')) {
+        const weekMatch = title.match(/\d+/);
+        const week = weekMatch ? weekMatch[0] : '';
+        headline = `WEEK ${week} KICKOFF: The road to the Playoff heats up as the mid-season grind begins.`;
+      }
+    } else if (title.toLowerCase().includes('moved to #') || title.toLowerCase().includes('poll')) {
+      category = 'RANKINGS';
+      colorClass = 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20';
+      targetPath = '/rankings';
+      headline = `POLL WATCH: ${title.toUpperCase()} after dominant showing.`;
     }
+
+    return { headline, category, colorClass, targetPath };
   };
 
   if (loading) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] p-8 flex flex-col items-center justify-center space-y-4">
+      <div className="bg-zinc-900/50 backdrop-blur-md border border-white/10 rounded-[2rem] p-8 flex flex-col items-center justify-center space-y-4">
         <div className="w-8 h-8 border-2 border-orange-600/30 border-t-orange-600 rounded-full animate-spin" />
-        <p className="text-zinc-500 text-xs font-black uppercase tracking-widest">Loading Feed...</p>
+        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Scanning News Wire...</p>
       </div>
     );
   }
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between px-2">
-        <h2 className="text-xs font-black text-zinc-500 uppercase tracking-[0.3em]">Latest Activity</h2>
-        <button className="text-[10px] font-black text-orange-500 uppercase tracking-widest hover:text-orange-400 transition-colors flex items-center gap-1">
-          View All
-          <ChevronRight className="w-3 h-3" />
-        </button>
+      <div className="flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <Zap className="w-3 h-3 text-orange-500 fill-orange-500" />
+          <h2 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">Dynasty News Wire</h2>
+        </div>
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] overflow-hidden">
-        <div className="divide-y divide-zinc-800/50">
+      <div className="bg-zinc-900/50 backdrop-blur-md border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl">
+        <div className="divide-y divide-white/5">
           <AnimatePresence initial={false}>
             {logs.length > 0 ? (
-              logs.map((log) => {
+              logs.map((log, index) => {
                 const isUserInvolved = log.metadata?.homeTeamId === userTeamId || 
                                      log.metadata?.awayTeamId === userTeamId || 
                                      log.metadata?.teamId === userTeamId;
                 
+                const { headline, category, colorClass, targetPath } = transformLogToHeadline(log);
+                
                 return (
                   <motion.div
                     key={log.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className={`p-5 flex gap-4 hover:bg-zinc-800/30 transition-colors relative group ${isUserInvolved ? 'bg-orange-600/5' : ''}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    onClick={() => navigate(targetPath)}
+                    className={`
+                      p-4 flex flex-col gap-2 cursor-pointer transition-all relative group
+                      ${isUserInvolved ? 'bg-orange-500/5' : 'hover:bg-white/[0.03]'}
+                    `}
                   >
+                    {/* User Highlight Indicator */}
                     {isUserInvolved && (
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-600" />
                     )}
                   
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                    log.type === 'game_result' ? 'bg-orange-600/10' : 
-                    log.type === 'recruiting_commit' ? 'bg-blue-600/10' : 
-                    'bg-green-600/10'
-                  }`}>
-                    {getIcon(log.type)}
-                  </div>
-
-                  <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                      <h4 className="text-xs font-black text-white uppercase tracking-wider truncate">
-                        {log.title}
-                      </h4>
-                      <span className="text-[10px] font-bold text-zinc-600 whitespace-nowrap">
+                      <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${colorClass}`}>
+                        {category}
+                      </div>
+                      <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-tighter">
                         {getRelativeTime(log.timestamp)}
                       </span>
                     </div>
-                    <p className="text-sm text-zinc-400 font-medium leading-relaxed">
-                      {log.description}
-                    </p>
-                  </div>
-                </motion.div>
-              );
-            })
-          ) : (
+
+                    <h4 className="text-xs font-black text-white uppercase tracking-tight leading-tight group-hover:text-orange-500 transition-colors">
+                      {headline}
+                    </h4>
+                  </motion.div>
+                );
+              })
+            ) : (
               <div className="p-12 text-center space-y-2">
-                <p className="text-zinc-500 font-bold text-sm uppercase tracking-widest">No activity yet</p>
-                <p className="text-zinc-600 text-xs">Events will appear here as the season progresses.</p>
+                <p className="text-zinc-500 font-bold text-sm uppercase tracking-widest">Quiet on the Wire</p>
+                <p className="text-zinc-600 text-[10px] uppercase tracking-tighter">No headlines to report at this time.</p>
               </div>
             )}
           </AnimatePresence>
         </div>
+
+        {/* View All News Button */}
+        <button
+          onClick={() => navigate('/activity')}
+          className="w-full py-3 bg-white/[0.02] hover:bg-white/[0.05] border-t border-white/5 transition-colors flex items-center justify-center gap-2 group"
+        >
+          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] group-hover:text-white transition-colors">
+            View All News
+          </span>
+          <ChevronRight className="w-3 h-3 text-zinc-600 group-hover:text-orange-500 transition-colors" />
+        </button>
       </div>
     </section>
   );

@@ -52,6 +52,7 @@ export const UnifiedStatEntryModal: React.FC<UnifiedStatEntryModalProps> = ({
 
   const [homeScore, setHomeScore] = useState<string>(game.homeScore?.toString() || '');
   const [awayScore, setAwayScore] = useState<string>(game.awayScore?.toString() || '');
+  const [showQuarters, setShowQuarters] = useState(false);
   const [homeStats, setHomeStats] = useState<TeamStats>(game.homeStats || { ...defaultStats });
   const [awayStats, setAwayStats] = useState<TeamStats>(game.awayStats || { ...defaultStats });
 
@@ -60,6 +61,7 @@ export const UnifiedStatEntryModal: React.FC<UnifiedStatEntryModalProps> = ({
     setAwayScore(game.awayScore?.toString() || '');
     setHomeStats(game.homeStats || { ...defaultStats });
     setAwayStats(game.awayStats || { ...defaultStats });
+    setShowQuarters(!!(game.homeStats?.q1 || game.awayStats?.q1));
     
     if (isOpen) {
       fetchPlayers();
@@ -228,54 +230,135 @@ export const UnifiedStatEntryModal: React.FC<UnifiedStatEntryModalProps> = ({
                 <button onClick={onClose} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
               </div>
 
-              {/* Tabs */}
-              <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-2xl mb-8 w-fit">
-                <button
-                  onClick={() => setActiveTab('team')}
-                  className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
-                    activeTab === 'team' ? 'bg-orange-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
-                  <Activity size={14} />
-                  Team Stats
-                </button>
-                <button
-                  onClick={() => setActiveTab('players')}
-                  className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
-                    activeTab === 'players' ? 'bg-orange-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
-                  <User size={14} />
-                  Player Stats
-                </button>
-              </div>
-
               <form onSubmit={handleSubmit} className="space-y-6">
-                {activeTab === 'team' ? (
-                  <>
-                    <div className="grid grid-cols-2 gap-6 mb-8">
+                {/* Quick Entry Section */}
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-[32px] p-8 mb-8">
+                  <div className="grid grid-cols-2 gap-12 relative">
+                    {/* VS Divider */}
+                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                      <div className="bg-zinc-950 px-4 py-1.5 rounded-full border border-zinc-800 shadow-xl">
+                        <span className="text-sm font-black text-zinc-600 uppercase tracking-[0.3em] italic">VS</span>
+                      </div>
+                    </div>
+
+                    {/* Away Team Input */}
+                    <div className="space-y-4 text-center">
+                      <div className="w-24 h-24 bg-zinc-900 rounded-3xl p-4 mx-auto flex items-center justify-center shadow-2xl border border-zinc-800 group transition-all hover:border-orange-500/50">
+                        <TeamLogo team={awayTeam} className="w-full h-full object-contain transition-transform group-hover:scale-110" />
+                      </div>
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider text-center block">{awayTeam.name} Score</label>
+                        <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">{awayTeam.name}</p>
                         <input
                           type="number"
                           value={awayScore}
                           onChange={(e) => setAwayScore(e.target.value)}
                           placeholder="0"
-                          className="w-full bg-zinc-900 border-2 border-zinc-800 rounded-2xl py-4 text-center text-3xl font-black text-white focus:border-orange-500"
+                          className="w-full bg-transparent border-none text-center text-6xl font-black text-white focus:ring-0 placeholder:text-zinc-800"
+                          autoFocus
                         />
                       </div>
+                    </div>
+
+                    {/* Home Team Input */}
+                    <div className="space-y-4 text-center">
+                      <div className="w-24 h-24 bg-zinc-900 rounded-3xl p-4 mx-auto flex items-center justify-center shadow-2xl border border-zinc-800 group transition-all hover:border-orange-500/50">
+                        <TeamLogo team={homeTeam} className="w-full h-full object-contain transition-transform group-hover:scale-110" />
+                      </div>
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider text-center block">{homeTeam.name} Score</label>
+                        <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">{homeTeam.name}</p>
                         <input
                           type="number"
                           value={homeScore}
                           onChange={(e) => setHomeScore(e.target.value)}
                           placeholder="0"
-                          className="w-full bg-zinc-900 border-2 border-zinc-800 rounded-2xl py-4 text-center text-3xl font-black text-white focus:border-orange-500"
+                          className="w-full bg-transparent border-none text-center text-6xl font-black text-white focus:ring-0 placeholder:text-zinc-800"
                         />
                       </div>
                     </div>
+                  </div>
 
+                  {/* Quarter Scores Toggle */}
+                  <div className="mt-8 flex flex-col items-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuarters(!showQuarters)}
+                      className="text-[10px] font-black text-orange-500 uppercase tracking-widest hover:text-orange-400 transition-colors flex items-center gap-2"
+                    >
+                      {showQuarters ? 'Hide Quarter Scores' : 'Add Quarter Scores'}
+                      <Plus className={`w-3 h-3 transition-transform ${showQuarters ? 'rotate-45' : ''}`} />
+                    </button>
+
+                    <AnimatePresence>
+                      {showQuarters && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden w-full mt-6"
+                        >
+                          <div className="grid grid-cols-5 gap-4 bg-zinc-950/50 rounded-2xl p-4 border border-zinc-800/50">
+                            <div className="col-span-1" />
+                            <div className="text-center text-[8px] font-black text-zinc-600 uppercase tracking-widest">Q1</div>
+                            <div className="text-center text-[8px] font-black text-zinc-600 uppercase tracking-widest">Q2</div>
+                            <div className="text-center text-[8px] font-black text-zinc-600 uppercase tracking-widest">Q3</div>
+                            <div className="text-center text-[8px] font-black text-zinc-600 uppercase tracking-widest">Q4</div>
+                            
+                            {/* Away Quarters */}
+                            <div className="text-[10px] font-black text-zinc-400 uppercase self-center">{awayTeam.name}</div>
+                            {[1, 2, 3, 4].map(q => (
+                              <input
+                                key={`away-q${q}`}
+                                type="number"
+                                value={awayStats[`q${q}` as keyof TeamStats] || ''}
+                                onChange={(e) => updateStats('away', `q${q}` as keyof TeamStats, e.target.value)}
+                                className="bg-zinc-900 border border-zinc-800 rounded-lg py-2 text-center text-sm font-bold text-white focus:border-orange-500 outline-none"
+                              />
+                            ))}
+
+                            {/* Home Quarters */}
+                            <div className="text-[10px] font-black text-zinc-400 uppercase self-center">{homeTeam.name}</div>
+                            {[1, 2, 3, 4].map(q => (
+                              <input
+                                key={`home-q${q}`}
+                                type="number"
+                                value={homeStats[`q${q}` as keyof TeamStats] || ''}
+                                onChange={(e) => updateStats('home', `q${q}` as keyof TeamStats, e.target.value)}
+                                className="bg-zinc-900 border border-zinc-800 rounded-lg py-2 text-center text-sm font-bold text-white focus:border-orange-500 outline-none"
+                              />
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-2xl mb-8 w-fit mx-auto">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('team')}
+                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                      activeTab === 'team' ? 'bg-orange-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    <Activity size={14} />
+                    Advanced Team Stats
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('players')}
+                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                      activeTab === 'players' ? 'bg-orange-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    <User size={14} />
+                    Advanced Player Stats
+                  </button>
+                </div>
+
+                {activeTab === 'team' ? (
+                  <>
                     <div className="space-y-8">
                       {/* Desktop/Tablet View */}
                       <div className="hidden md:grid grid-cols-3 gap-4">

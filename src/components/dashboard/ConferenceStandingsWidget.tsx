@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
-import { TeamAssignment } from '../../types';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
-import { ChevronRight, LayoutGrid } from 'lucide-react';
-import { getTeamLogo } from '../../utils/teamAssets';
-import { TeamLogo } from '../common/TeamLogo';
+import { ChevronRight, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useStandings } from '../../hooks/useStandings';
+import { TeamLogo } from '../common/TeamLogo';
+import { getTeamShortName } from '../../utils/teamAssets';
 
 interface ConferenceStandingsWidgetProps {
   leagueId: string;
@@ -19,51 +17,40 @@ export const ConferenceStandingsWidget: React.FC<ConferenceStandingsWidgetProps>
   conference,
   userTeamId
 }) => {
-  const [teams, setTeams] = useState<TeamAssignment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { standings, loading } = useStandings(leagueId);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!leagueId || !conference) return;
+  const conferenceTeams = useMemo(() => {
+    if (!standings.length) return [];
 
-    const teamsRef = collection(db, 'leagues', leagueId, 'teams');
-    // Fetch all teams in the conference. We sort in memory to handle missing fields.
-    const q = query(
-      teamsRef, 
-      where('conference', '==', conference)
-    );
+    const filtered = standings.filter(t => t.conference === conference);
+    
+    // Check if any games have been played
+    const totalGames = filtered.reduce((acc, t) => acc + t.wins + t.losses, 0);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamAssignment));
-      
-      // Sort in memory: Wins (desc), Losses (asc), then Name
-      const sortedTeams = [...teamsData].sort((a, b) => {
-        const aWins = a.confWins || 0;
-        const bWins = b.confWins || 0;
-        if (aWins !== bWins) return bWins - aWins;
+    if (totalGames === 0) {
+      // Week 1 / Preseason: Sort by currentRank (or preseason rank)
+      return [...filtered].sort((a, b) => (a.currentRank || 125) - (b.currentRank || 125));
+    }
 
-        const aLosses = a.confLosses || 0;
-        const bLosses = b.confLosses || 0;
-        if (aLosses !== bLosses) return aLosses - bLosses;
-
-        return a.name.localeCompare(b.name);
-      });
-
-      setTeams(sortedTeams.slice(0, 8));
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching Conference Standings:", error);
-      setLoading(false);
+    // Regular sorting
+    return [...filtered].sort((a, b) => {
+      // Primary: Conf Win %
+      if (b.confWinPct !== a.confWinPct) return b.confWinPct - a.confWinPct;
+      // Secondary: Overall Win %
+      if (b.totalWinPct !== a.totalWinPct) return b.totalWinPct - a.totalWinPct;
+      // Final: Alphabetical
+      return a.name.localeCompare(b.name);
     });
+  }, [standings, conference]);
 
-    return () => unsubscribe();
-  }, [leagueId, conference]);
+  const displayTeams = conferenceTeams.slice(0, 6);
 
   if (loading) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] p-6 animate-pulse space-y-4">
-        <div className="h-4 w-24 bg-zinc-800 rounded" />
-        {[1, 2, 3, 4, 5].map(i => (
+      <div className="bg-zinc-900/50 backdrop-blur-md border border-white/10 rounded-[2rem] p-6 animate-pulse space-y-4">
+        <div className="h-4 w-32 bg-zinc-800 rounded-full mx-auto" />
+        {[1, 2, 3, 4, 5, 6].map(i => (
           <div key={i} className="flex items-center gap-3">
             <div className="w-8 h-8 bg-zinc-800 rounded-lg" />
             <div className="h-4 flex-1 bg-zinc-800 rounded" />
@@ -75,59 +62,106 @@ export const ConferenceStandingsWidget: React.FC<ConferenceStandingsWidgetProps>
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between px-2">
-        <h2 className="text-xs font-black text-zinc-500 uppercase tracking-[0.3em]">{conference} Standings</h2>
-        <button 
-          onClick={() => navigate('/standings')}
-          className="text-[10px] font-black text-orange-500 uppercase tracking-widest hover:text-orange-400 transition-colors flex items-center gap-1"
-        >
-          View All
-          <ChevronRight className="w-3 h-3" />
-        </button>
+      {/* Header Pill */}
+      <div className="flex justify-center">
+        <div className="bg-orange-600 px-4 py-1 rounded-full shadow-lg shadow-orange-900/20 flex items-center gap-2">
+          <Trophy className="w-2.5 h-2.5 text-white" />
+          <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">
+            {conference} Standings
+          </span>
+        </div>
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] overflow-hidden">
-        {teams.length > 0 ? (
-          <div className="divide-y divide-zinc-800/50">
-            {teams.map((team) => (
-              <motion.div
-                key={team.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className={`p-4 flex items-center gap-4 hover:bg-zinc-800/30 transition-colors group relative ${team.id === userTeamId ? 'bg-orange-600/5' : ''}`}
-              >
-                {team.id === userTeamId && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-600" />
-                )}
+      <div className="bg-zinc-900/50 backdrop-blur-md border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-white/5">
+                <th className="py-3 px-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Rank</th>
+                <th className="py-3 px-2 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Team</th>
+                <th className="py-3 px-2 text-[9px] font-black text-zinc-500 uppercase tracking-widest text-center">Conf</th>
+                <th className="py-3 px-2 text-[9px] font-black text-zinc-500 uppercase tracking-widest text-center hidden sm:table-cell">Ovr</th>
+                <th className="py-3 px-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest text-right hidden sm:table-cell">Strk</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {displayTeams.map((team, index) => {
+                const isUser = team.id === userTeamId;
+                const shortName = getTeamShortName(team.name);
                 
-                <div className="w-10 h-10 bg-zinc-950 rounded-xl p-2 border border-zinc-800 flex items-center justify-center shrink-0">
-                  <TeamLogo 
-                    schoolName={team.name} 
-                    className="w-full h-full object-contain"
-                  />
-                </div>
+                return (
+                  <motion.tr
+                    key={team.id || team.name}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={`
+                      group transition-colors
+                      ${isUser ? 'bg-orange-500/5' : index % 2 === 1 ? 'bg-white/[0.02]' : 'hover:bg-white/[0.05]'}
+                    `}
+                  >
+                    <td className={`py-3 px-4 w-16 text-center transition-all ${isUser ? 'shadow-[inset_4px_0_0_0_#ea580c]' : ''}`}>
+                      <span className={`text-xs font-black italic ${isUser ? 'text-orange-500' : 'text-zinc-500'}`}>
+                        {index + 1}
+                      </span>
+                    </td>
 
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-bold text-white truncate uppercase italic tracking-tight">
-                    {team.name}
-                  </h4>
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                    {team.confWins || 0}-{team.confLosses || 0} Conf • {team.wins || 0}-{team.losses || 0} Overall
-                  </p>
-                </div>
+                    <td className="py-3 px-2">
+                      <div className="flex items-center gap-3">
+                        {/* Fixed-width logo container for perfect vertical alignment */}
+                        <div className="w-10 flex justify-center shrink-0">
+                          <div className="w-7 h-7 bg-black/40 rounded-lg p-1 border border-white/5 flex items-center justify-center">
+                            <TeamLogo 
+                              schoolName={team.name} 
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                        </div>
+                        <span className={`text-xs font-black uppercase italic tracking-tighter ${isUser ? 'text-white' : 'text-zinc-100'}`}>
+                          {shortName}
+                        </span>
+                      </div>
+                    </td>
 
-                {team.id === userTeamId && (
-                  <LayoutGrid className="w-4 h-4 text-orange-500 shrink-0" />
-                )}
-              </motion.div>
-            ))}
-          </div>
-        ) : (
-          <div className="p-8 text-center space-y-2">
-            <p className="text-zinc-500 font-bold text-xs uppercase tracking-widest">Preseason</p>
-            <p className="text-[10px] text-zinc-600">Standings will update as games are played.</p>
-          </div>
-        )}
+                    <td className="py-3 px-2 text-center">
+                      <span className="text-[10px] font-bold text-zinc-300 tabular-nums">
+                        {team.confWins}-{team.confLosses}
+                      </span>
+                    </td>
+
+                    <td className="py-3 px-2 text-center hidden sm:table-cell">
+                      <span className="text-[10px] font-bold text-zinc-500 tabular-nums">
+                        {team.wins}-{team.losses}
+                      </span>
+                    </td>
+
+                    <td className="py-3 px-4 text-right hidden sm:table-cell">
+                      <span className={`
+                        text-[9px] font-black px-1.5 py-0.5 rounded uppercase
+                        ${team.streak.startsWith('W') ? 'bg-green-500/10 text-green-500' : 
+                          team.streak.startsWith('L') ? 'bg-red-500/10 text-red-500' : 
+                          'bg-zinc-800 text-zinc-500'}
+                      `}>
+                        {team.streak}
+                      </span>
+                    </td>
+                  </motion.tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* View Full Standings Button */}
+        <button
+          onClick={() => navigate('/standings')}
+          className="w-full py-3 bg-white/[0.02] hover:bg-white/[0.05] border-t border-white/5 transition-colors flex items-center justify-center gap-2 group"
+        >
+          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] group-hover:text-white transition-colors">
+            View Full Standings
+          </span>
+          <ChevronRight className="w-3 h-3 text-zinc-600 group-hover:text-orange-500 transition-colors" />
+        </button>
       </div>
     </section>
   );
