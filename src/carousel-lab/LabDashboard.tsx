@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -22,10 +22,16 @@ import {
   CheckSquare,
   Square,
   Zap,
-  MoreVertical
+  MoreVertical,
+  Save,
+  Loader2
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLab } from './LabContext';
+import { useLeague } from '../context/LeagueContext';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
+import { CarouselCoach } from '../types';
 import { SCHOOLS } from '../constants/schools';
 import FiringRoom from './FiringRoom';
 import CarouselFloor from './CarouselFloor';
@@ -33,7 +39,24 @@ import CarouselFloor from './CarouselFloor';
 const CONFERENCES = ['ALL', ...Array.from(new Set(SCHOOLS.map(s => s.conference))).sort()];
 
 const LabDashboard: React.FC = () => {
-  const { state, linkPilot, unpilot, fireCoach, hireCoach, batchFire, batchReset, batchStageFire, resetLab, error, clearError } = useLab();
+  const { 
+    state, 
+    linkPilot, 
+    unpilot, 
+    fireCoach, 
+    hireCoach, 
+    batchFire, 
+    batchReset, 
+    batchStageFire, 
+    resetLab, 
+    commitChanges,
+    isCommitting,
+    error, 
+    clearError 
+  } = useLab();
+  const { currentLeagueId } = useLeague();
+  const [liveCoaches, setLiveCoaches] = useState<CarouselCoach[]>([]);
+  const [isLoadingLive, setIsLoadingLive] = useState(false);
   const [activeTab, setActiveTab] = useState<'staffing' | 'firing' | 'carousel'>('staffing');
   const [search, setSearch] = useState('');
   const [conferenceFilter, setConferenceFilter] = useState('ALL');
@@ -48,8 +71,72 @@ const LabDashboard: React.FC = () => {
   const [isAssigningPersona, setIsAssigningPersona] = useState(false);
   const [isAssigningPilot, setIsAssigningPilot] = useState(false);
   const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [showCommitSuccess, setShowCommitSuccess] = useState(false);
+  const [commitCount, setCommitCount] = useState(0);
 
   const parentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (currentLeagueId) {
+      fetchLiveCoaches();
+    }
+  }, [currentLeagueId]);
+
+  const fetchLiveCoaches = async () => {
+    if (!currentLeagueId) return;
+    setIsLoadingLive(true);
+    try {
+      const coachesRef = collection(db, 'coaches');
+      const q = query(coachesRef, where('leagueId', '==', currentLeagueId));
+      const snap = await getDocs(q);
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CarouselCoach[];
+      setLiveCoaches(data);
+    } catch (err) {
+      console.error('Error fetching live coaches:', err);
+    } finally {
+      setIsLoadingLive(false);
+    }
+  };
+
+  const handleCommit = async () => {
+    if (!currentLeagueId) return;
+    
+    // Final UI Staffing Guard Check
+    const schools = Array.from(new Set(state.slots.map(s => s.schoolId)));
+    for (const schoolId of schools) {
+      const schoolSlots = state.slots.filter(s => s.schoolId === schoolId);
+      const humanPilotIds = new Set<string>();
+      
+      for (const slot of schoolSlots) {
+        const personaId = state.stagedHires[slot.id] || slot.personaId;
+        if (personaId) {
+          const persona = state.personas.find(p => p.id === personaId);
+          if (persona && persona.pilotId) {
+            humanPilotIds.add(persona.pilotId);
+          }
+        }
+      }
+
+      if (humanPilotIds.size > 1) {
+        alert(`Staffing Guard Violation: ${schoolId} has multiple human pilots assigned. Only one human is allowed per staff. Please fix this before committing.`);
+        return;
+      }
+    }
+
+    if (!window.confirm('Are you sure you want to commit these changes to the live database? This will update all modified coaches.')) {
+      return;
+    }
+
+    try {
+      const count = await commitChanges(currentLeagueId, liveCoaches);
+      setCommitCount(count);
+      setShowCommitSuccess(true);
+      fetchLiveCoaches(); // Refresh live data
+      setTimeout(() => setShowCommitSuccess(false), 5000);
+    } catch (err) {
+      // Error is handled by LabContext and displayed in the UI
+    }
+  };
 
   const filteredSchools = useMemo(() => {
     return SCHOOLS.filter(s => {
@@ -181,6 +268,25 @@ const LabDashboard: React.FC = () => {
               >
                 <RefreshCcw size={16} />
               </button>
+
+              <div className="w-px h-6 bg-zinc-800 mx-2" />
+
+              <button 
+                onClick={handleCommit}
+                disabled={isCommitting || isLoadingLive}
+                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg ${
+                  isCommitting 
+                    ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' 
+                    : 'bg-white text-black hover:bg-zinc-200 shadow-white/10'
+                }`}
+              >
+                {isCommitting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Save size={14} />
+                )}
+                {isCommitting ? 'Committing...' : 'Commit Changes'}
+              </button>
             </div>
           </div>
 
@@ -230,6 +336,68 @@ const LabDashboard: React.FC = () => {
       </header>
 
       <div className="flex-1 flex overflow-hidden relative">
+        {/* Success Toast */}
+        <AnimatePresence>
+          {showCommitSuccess && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] bg-green-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-green-500"
+            >
+              <UserCheck size={20} />
+              <span className="text-xs font-black uppercase tracking-widest">
+                Successfully updated {commitCount} coaches in production
+              </span>
+              <button onClick={() => setShowCommitSuccess(false)} className="ml-2 hover:text-green-200">
+                <X size={16} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Error Modal */}
+        <AnimatePresence>
+          {error && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={clearError}
+                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="relative bg-zinc-900 border border-red-900/50 rounded-[32px] p-8 max-w-md w-full shadow-2xl"
+              >
+                <div className="flex items-center gap-4 text-red-500 mb-6">
+                  <div className="p-3 bg-red-500/10 rounded-2xl">
+                    <ShieldAlert size={32} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black uppercase italic tracking-tight">Staffing Guard</h2>
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-50">Commit Interrupted</p>
+                  </div>
+                </div>
+                
+                <p className="text-zinc-300 text-sm font-bold leading-relaxed mb-8">
+                  {error}
+                </p>
+
+                <button 
+                  onClick={clearError}
+                  className="w-full py-4 bg-zinc-800 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-700 transition-all"
+                >
+                  Dismiss & Resolve
+                </button>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
         {/* Left Sidebar: Rules (Collapsible) */}
         <motion.aside 
           initial={false}

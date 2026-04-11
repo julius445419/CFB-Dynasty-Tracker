@@ -1,4 +1,5 @@
 import { LabState, CoachingRole, StaffingSlot, CoachPersona, HumanPilot } from './types';
+import { generateInviteCode } from '../lib/inviteUtils';
 
 export class StaffingGuardError extends Error {
   constructor(message: string) {
@@ -53,6 +54,9 @@ export const StaffingService = {
     const persona = state.personas.find(p => p.id === personaId);
     if (!persona) throw new StaffingGuardError('Persona not found');
 
+    const pilot = state.pilots.find(p => p.id === pilotId);
+    if (!pilot) throw new StaffingGuardError('Pilot not found');
+
     // Find which slot this persona is in
     const slot = state.slots.find(s => s.personaId === personaId);
     if (!slot) {
@@ -64,11 +68,14 @@ export const StaffingService = {
       throw new StaffingGuardError(`One Human Rule: ${slot.schoolId} already has a human pilot assigned to its staff.`);
     }
 
+    // Generate invite code if it's a Shadow pilot and doesn't have one yet
+    const inviteCode = pilot.type === 'SHADOW' ? (persona.inviteCode || generateInviteCode()) : undefined;
+
     return {
       ...state,
       personas: state.personas.map(p => 
         p.id === personaId 
-          ? { ...p, pilotId, isUserControlled: true } 
+          ? { ...p, pilotId, isUserControlled: true, inviteCode: inviteCode || p.inviteCode } 
           : p
       )
     };

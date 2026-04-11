@@ -13,9 +13,15 @@ import {
   UserPlus,
   ArrowUpRight,
   ChevronRight,
-  RefreshCcw
+  RefreshCcw,
+  Save,
+  Loader2
 } from 'lucide-react';
 import { useLab } from './LabContext';
+import { useLeague } from '../context/LeagueContext';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
+import { CarouselCoach } from '../types';
 import { SCHOOLS } from '../constants/schools';
 import { CoachPersona } from './types';
 
@@ -25,12 +31,57 @@ interface CarouselFloorProps {
 }
 
 const CarouselFloor: React.FC<CarouselFloorProps> = ({ activeTab, setActiveTab }) => {
-  const { state, hireCoach, resetLab } = useLab();
+  const { state, hireCoach, resetLab, commitChanges, isCommitting } = useLab();
+  const { currentLeagueId } = useLeague();
+  const [liveCoaches, setLiveCoaches] = useState<CarouselCoach[]>([]);
+  const [isLoadingLive, setIsLoadingLive] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [activePickerTab, setActivePickerTab] = useState<'staging' | 'unassigned' | 'active'>('staging');
   const [pickerSearch, setPickerSearch] = useState('');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [showCommitSuccess, setShowCommitSuccess] = useState(false);
+  const [commitCount, setCommitCount] = useState(0);
+
+  useEffect(() => {
+    if (currentLeagueId) {
+      fetchLiveCoaches();
+    }
+  }, [currentLeagueId]);
+
+  const fetchLiveCoaches = async () => {
+    if (!currentLeagueId) return;
+    setIsLoadingLive(true);
+    try {
+      const coachesRef = collection(db, 'coaches');
+      const q = query(coachesRef, where('leagueId', '==', currentLeagueId));
+      const snap = await getDocs(q);
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CarouselCoach[];
+      setLiveCoaches(data);
+    } catch (err) {
+      console.error('Error fetching live coaches:', err);
+    } finally {
+      setIsLoadingLive(false);
+    }
+  };
+
+  const handleCommit = async () => {
+    if (!currentLeagueId) return;
+    
+    if (!window.confirm('Are you sure you want to commit these changes to the live database?')) {
+      return;
+    }
+
+    try {
+      const count = await commitChanges(currentLeagueId, liveCoaches);
+      setCommitCount(count);
+      setShowCommitSuccess(true);
+      fetchLiveCoaches();
+      setTimeout(() => setShowCommitSuccess(false), 5000);
+    } catch (err) {
+      // Error handled by context
+    }
+  };
 
   // Calculate Vacancies
   const vacancies = useMemo(() => {
@@ -147,6 +198,25 @@ const CarouselFloor: React.FC<CarouselFloorProps> = ({ activeTab, setActiveTab }
               <div className="w-px h-6 bg-zinc-800 mx-2" />
 
               <button 
+                onClick={handleCommit}
+                disabled={isCommitting || isLoadingLive}
+                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg ${
+                  isCommitting 
+                    ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' 
+                    : 'bg-white text-black hover:bg-zinc-200 shadow-white/10'
+                }`}
+              >
+                {isCommitting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Save size={14} />
+                )}
+                {isCommitting ? 'Committing...' : 'Commit Changes'}
+              </button>
+
+              <div className="w-px h-6 bg-zinc-800 mx-2" />
+
+              <button 
                 onClick={() => setIsHistoryOpen(true)}
                 className="px-6 py-3 bg-zinc-900 border border-zinc-800 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center gap-2"
               >
@@ -247,7 +317,7 @@ const CarouselFloor: React.FC<CarouselFloorProps> = ({ activeTab, setActiveTab }
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl md:max-h-[85vh] bg-zinc-900 border border-zinc-800 rounded-[40px] z-[101] flex flex-col overflow-hidden shadow-2xl"
+              className="fixed inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl max-h-[90vh] md:max-h-[85vh] bg-zinc-900 border border-zinc-800 rounded-[40px] z-[101] flex flex-col overflow-hidden shadow-2xl"
             >
               <div className="p-8 border-b border-zinc-800 shrink-0 flex items-center justify-between">
                 <div>

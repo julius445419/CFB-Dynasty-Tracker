@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { LabState, StaffingSlot, CoachPersona, HumanPilot } from './types';
 import { seedLabData } from './seedLab';
 import { StaffingService } from './staffingService';
+import { commitStaffingChanges } from '../services/staffingService';
+import { CarouselCoach } from '../types';
 
 interface LabContextType {
   state: LabState;
@@ -18,6 +20,8 @@ interface LabContextType {
   setDisposition: (personaId: string, disposition: 'UNASSIGNED' | 'RETIRE') => void;
   hireCoach: (slotId: string, personaId: string) => void;
   resetLab: () => void;
+  commitChanges: (leagueId: string, liveCoaches: CarouselCoach[]) => Promise<number>;
+  isCommitting: boolean;
   error: string | null;
   clearError: () => void;
 }
@@ -43,6 +47,7 @@ export const LabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   });
   const [error, setError] = useState<string | null>(null);
+  const [isCommitting, setIsCommitting] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('staffing-lab-state', JSON.stringify(state));
@@ -271,6 +276,76 @@ export const LabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.removeItem('staffing-lab-state');
   };
 
+  const commitChanges = async (leagueId: string, liveCoaches: CarouselCoach[]): Promise<number> => {
+    setIsCommitting(true);
+    setError(null);
+    
+    try {
+      // 1. Final Staffing Guard Check
+      // Verify: No team has more than one unique userId (where userId !== null/CPU) assigned across HC, OC, and DC.
+      const schools = Array.from(new Set(state.slots.map(s => s.schoolId)));
+      for (const schoolId of schools) {
+        const schoolSlots = state.slots.filter(s => s.schoolId === schoolId);
+        const humanPilotIds = new Set<string>();
+        
+        for (const slot of schoolSlots) {
+          const personaId = state.stagedHires[slot.id] || slot.personaId;
+          if (personaId) {
+            const persona = state.personas.find(p => p.id === personaId);
+            if (persona && persona.pilotId) {
+              humanPilotIds.add(persona.pilotId);
+            }
+          }
+        }
+
+        if (humanPilotIds.size > 1) {
+          throw new Error(`Staffing Guard Violation: ${schoolId} has multiple human pilots assigned. Only one human is allowed per staff.`);
+        }
+      }
+
+      // 2. Prepare Staged Coaches for Commit
+      // We need to map our LabState back to CarouselCoach objects
+      const stagedCoaches: CarouselCoach[] = state.personas.map(persona => {
+        const live = liveCoaches.find(l => l.id === persona.id);
+        const currentSlot = state.slots.find(s => (state.stagedHires[s.id] || s.personaId) === persona.id);
+        const disposition = state.stagedDispositions[persona.id];
+
+        return {
+          ...live,
+          id: persona.id,
+          name: persona.name,
+          userId: persona.pilotId || null,
+          teamId: currentSlot ? currentSlot.schoolId : null,
+          role: currentSlot ? currentSlot.role : 'Unassigned',
+          inviteCode: persona.inviteCode,
+          status: disposition === 'RETIRE' ? 'retired' : (live as any)?.status || 'active',
+          leagueId: leagueId,
+          updatedAt: new Date()
+        } as CarouselCoach;
+      });
+
+      // 3. Execute Commit
+      const result = await commitStaffingChanges(leagueId, stagedCoaches, liveCoaches);
+      
+      // 4. Success State
+      // Clear staging and reset Lab to a clean state (or sync with new live data)
+      setState(prev => ({
+        ...prev,
+        stagedFires: [],
+        stagedDispositions: {},
+        stagedHires: {},
+        moveHistory: []
+      }));
+
+      return result.updatedCount;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsCommitting(false);
+    }
+  };
+
   return (
     <LabContext.Provider value={{ 
       state, 
@@ -287,6 +362,8 @@ export const LabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setDisposition,
       hireCoach,
       resetLab,
+      commitChanges,
+      isCommitting,
       error,
       clearError
     }}>

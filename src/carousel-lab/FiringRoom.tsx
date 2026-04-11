@@ -16,10 +16,16 @@ import {
   Square,
   ChevronLeft,
   Settings2,
-  Zap
+  Zap,
+  Save,
+  Loader2
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLab } from './LabContext';
+import { useLeague } from '../context/LeagueContext';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
+import { CarouselCoach } from '../types';
 import { SCHOOLS } from '../constants/schools';
 
 const CONFERENCES = ['ALL', ...Array.from(new Set(SCHOOLS.map(s => s.conference))).sort()];
@@ -30,7 +36,10 @@ interface FiringRoomProps {
 }
 
 const FiringRoom: React.FC<FiringRoomProps> = ({ activeTab, setActiveTab }) => {
-  const { state, stageFire, batchStageFire, undoFire, batchUndoFire, setDisposition, resetLab } = useLab();
+  const { state, stageFire, batchStageFire, undoFire, batchUndoFire, setDisposition, resetLab, commitChanges, isCommitting } = useLab();
+  const { currentLeagueId } = useLeague();
+  const [liveCoaches, setLiveCoaches] = useState<CarouselCoach[]>([]);
+  const [isLoadingLive, setIsLoadingLive] = useState(false);
   const [search, setSearch] = useState('');
   const [conferenceFilter, setConferenceFilter] = useState('ALL');
   const [roleFocus, setRoleFocus] = useState<'ALL' | 'HC' | 'OC' | 'DC'>('ALL');
@@ -39,8 +48,50 @@ const FiringRoom: React.FC<FiringRoomProps> = ({ activeTab, setActiveTab }) => {
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [mobileRoleIndex, setMobileRoleIndex] = useState<Record<string, number>>({}); // schoolId -> index
   const [notifications, setNotifications] = useState<{id: string, message: string, type: 'fire' | 'undo'}[]>([]);
+  const [showCommitSuccess, setShowCommitSuccess] = useState(false);
+  const [commitCount, setCommitCount] = useState(0);
   
   const parentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (currentLeagueId) {
+      fetchLiveCoaches();
+    }
+  }, [currentLeagueId]);
+
+  const fetchLiveCoaches = async () => {
+    if (!currentLeagueId) return;
+    setIsLoadingLive(true);
+    try {
+      const coachesRef = collection(db, 'coaches');
+      const q = query(coachesRef, where('leagueId', '==', currentLeagueId));
+      const snap = await getDocs(q);
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CarouselCoach[];
+      setLiveCoaches(data);
+    } catch (err) {
+      console.error('Error fetching live coaches:', err);
+    } finally {
+      setIsLoadingLive(false);
+    }
+  };
+
+  const handleCommit = async () => {
+    if (!currentLeagueId) return;
+    
+    if (!window.confirm('Are you sure you want to commit these changes to the live database?')) {
+      return;
+    }
+
+    try {
+      const count = await commitChanges(currentLeagueId, liveCoaches);
+      setCommitCount(count);
+      setShowCommitSuccess(true);
+      fetchLiveCoaches();
+      setTimeout(() => setShowCommitSuccess(false), 5000);
+    } catch (err) {
+      // Error handled by context
+    }
+  };
 
   const addNotification = (message: string, type: 'fire' | 'undo') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -190,6 +241,25 @@ const FiringRoom: React.FC<FiringRoomProps> = ({ activeTab, setActiveTab }) => {
                 title="Reset Sandbox"
               >
                 <RotateCcw size={16} />
+              </button>
+
+              <div className="w-px h-6 bg-zinc-800 mx-2" />
+
+              <button 
+                onClick={handleCommit}
+                disabled={isCommitting || isLoadingLive}
+                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg ${
+                  isCommitting 
+                    ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' 
+                    : 'bg-white text-black hover:bg-zinc-200 shadow-white/10'
+                }`}
+              >
+                {isCommitting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Save size={14} />
+                )}
+                {isCommitting ? 'Committing...' : 'Commit Changes'}
               </button>
 
               <div className="w-px h-6 bg-zinc-800 mx-2" />

@@ -12,6 +12,7 @@ export interface CoachPersona {
   name: string;
   isUserControlled: boolean;
   pilotId: string | null; // Nullable
+  inviteCode?: string;
 }
 
 export interface StaffingSlot {
