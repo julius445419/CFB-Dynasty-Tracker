@@ -503,7 +503,7 @@ export const Schools = () => {
                   {selectedSchool.conference} Conference
                 </motion.div>
                 <h1 className="text-3xl sm:text-6xl font-display font-black text-white tracking-tighter leading-none">
-                  {selectedSchool.name.toUpperCase()}
+                  {(selectedSchool.name || '').toUpperCase()}
                 </h1>
               </div>
               
@@ -767,7 +767,7 @@ export const Schools = () => {
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-4">
                           <div className="w-10 h-10 rounded-xl bg-zinc-950 flex items-center justify-center text-[10px] font-black text-zinc-500 border border-white/5 group-hover:border-orange-600/30 transition-colors">
-                            {player.name.split(' ').map(n => n[0]).join('')}
+                            {(player.name || '').split(' ').map(n => n[0]).join('')}
                           </div>
                           <div>
                             <span className="text-white font-bold group-hover:text-orange-600 transition-colors block">{player.name}</span>
@@ -869,7 +869,7 @@ export const Schools = () => {
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <span className="text-white font-black text-2xl">{opponent?.name.charAt(0)}</span>
+                          <span className="text-white font-black text-2xl">{opponent?.name?.charAt(0) || '?'}</span>
                         )}
                       </div>
                       <div className="min-w-0">
@@ -1215,7 +1215,7 @@ export const Schools = () => {
                           {logoUrl ? (
                             <img src={logoUrl} alt={selectedSchool.name} className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" referrerPolicy="no-referrer" />
                           ) : (
-                            selectedSchool.name.charAt(0)
+                            selectedSchool.name?.charAt(0) || '?'
                           )}
                         </div>
                         <div>
@@ -1673,7 +1673,7 @@ export const Schools = () => {
                       </div>
                       <div className="space-y-0.5">
                         <h3 className="text-base sm:text-lg font-display font-black text-white tracking-tight group-hover:text-orange-500 transition-colors">
-                          {school.name.toUpperCase()}
+                          {(school.name || '').toUpperCase()}
                         </h3>
                         <p className="text-[8px] sm:text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
                           {school.conference} Conference
@@ -1719,7 +1719,7 @@ export const Schools = () => {
 
                     <div className="space-y-1">
                       <h3 className={`${viewMode === 'compact' ? 'text-sm sm:text-base' : 'text-2xl'} font-display font-black text-white tracking-tight group-hover:text-orange-500 transition-colors line-clamp-1`}>
-                        {school.name.toUpperCase()}
+                        {(school.name || '').toUpperCase()}
                       </h3>
                       <p className="text-[8px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
                         {school.conference}

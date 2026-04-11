@@ -150,6 +150,14 @@ const AdminDashboard: React.FC = () => {
       bg: 'bg-orange-600/10'
     },
     {
+      title: 'Identity Lab',
+      description: 'Isolated sandbox for testing staffing & pilot logic.',
+      icon: RefreshCw,
+      path: '/admin/lab',
+      color: 'text-green-500',
+      bg: 'bg-green-500/10'
+    },
+    {
       title: 'League Settings',
       description: 'Configure league rules, year, and phase.',
       icon: Shield,

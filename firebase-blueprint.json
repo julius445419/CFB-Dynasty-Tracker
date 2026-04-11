@@ -226,9 +226,24 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["leagueId", "seasonYear", "week", "pollType", "rankings"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A human user account.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "systemName": { "type": "string", "description": "The user's unique account identity (GamerTag)." },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "lastLogin": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["displayName", "systemName", "email"]
     }
   },
   "firestore": {
+    "/users": { "schema": "User", "description": "Global collection of user profiles." },
     "/teams": { "schema": "GlobalTeam", "description": "Global list of all schools (FBS and FCS)." },
     "/leagues": { "schema": "League", "description": "Collection of dynasty leagues." },
     "/leagues/{leagueId}/seasons": { "schema": "Season", "description": "Seasons for a specific league." },

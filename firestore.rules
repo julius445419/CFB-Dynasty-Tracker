@@ -1,353 +1,177 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    // Collection: leagues
-    // Fields: name (string), ownerId (string), createdAt (timestamp)
-    //
-    // Collection: seasons
-    // Fields: leagueId (string), year (int), isCurrent (bool)
-    //
-    // Collection: teams
-    // Fields: ownerId (string), ownerEmail (string), firstName (string), lastName (string), school (string), logoId (string|number), role (string), joinedAt (timestamp)
-    //
-    // Collection: requests
-    // Fields: userId (string), userEmail (string), firstName (string), lastName (string), school (string), logoId (string|number), role (string), status (string), createdAt (timestamp)
-    //
-    // Collection: games
-    // Fields: week (int), homeTeamId (string), awayTeamId (string), homeScore (int), awayScore (int), status (string), leagueId (string), season (int), quarterLengthAtGame (int), homeStats (map), awayStats (map)
-    //
-    // Collection: players
-    // Fields: name (string), pos (string), year (string), ovr (int), teamId (string), hometown (string)
-    //
-    // Collection: teamStats
-    // Fields: gameId (string), teamId (string), score (int), totalYards (int), passingYards (int), rushingYards (int), turnovers (int), firstDowns (int), ypp (float), rushingAttempts (int), rushingTds (int), completions (int), passingAttempts (int), passingTds (int), fumblesLost (int), interceptionsThrown (int), penalties (int), penaltyYards (int), timeOfPossession (string)
-    //
-    // Collection: playerStats
-    // Fields: gameId (string), playerId (string), teamId (string), passYds (int), passTDs (int), etc.
-    // ===============================================================
-
     // Helper Functions
     function isAuthenticated() {
       return request.auth != null;
     }
-
-    function isAdmin() {
-      return isAuthenticated() &&
-        (request.auth.token.email == "julius445419@gmail.com" ||
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
-    }
-
+    
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isNumber(val) {
-      return val is int || val is float;
+    function isLeagueOwner(leagueId) {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/leagues/$(leagueId)).data.ownerId == request.auth.uid ||
+         (exists(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)) && 
+          (get(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)).data.role == 'owner' ||
+           get(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)).data.role == 'commissioner')));
     }
 
-    function isLeagueOwner(leagueId) {
-      return isAdmin() || (isAuthenticated() && (
+    function canDeleteLeagueData(leagueId) {
+      return isAuthenticated() && (
         get(/databases/$(database)/documents/leagues/$(leagueId)).data.ownerId == request.auth.uid ||
         (exists(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)).data.role in ['Owner', 'Commissioner', 'Admin', 'owner', 'commissioner', 'admin'])
-      ));
+         get(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)).data.permissions.canDeleteLeague == true) ||
+        isAdmin()
+      );
     }
 
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((request.auth.token.email == "julius445419@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    // Validation Functions
     function isValidLeague(data) {
-      return data.keys().hasAll(['name', 'ownerId', 'createdAt']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.ownerId is string &&
-             (!('nameSearch' in data) || data.nameSearch is string) &&
-             (!('commissioners' in data) || data.commissioners is list) &&
-             (!('currentYear' in data) || data.currentYear is int) &&
-             (!('currentWeek' in data) || data.currentWeek is int) &&
-             (!('seasonPhase' in data) || data.seasonPhase is string);
-    }
-
-    function isValidGame(data) {
-      return data.keys().hasAll(['week', 'homeTeamId', 'awayTeamId', 'homeScore', 'awayScore', 'status', 'leagueId', 'season', 'isUvU', 'createdBy', 'homeTeamName', 'awayTeamName', 'createdAt', 'updatedAt']) &&
-             data.week is int &&
-             data.homeTeamId is string &&
-             data.awayTeamId is string &&
-             data.homeScore is int &&
-             data.awayScore is int &&
-             data.status in ['scheduled', 'final'] &&
-             data.leagueId is string &&
-             data.season is int &&
-             data.isUvU is bool &&
-             data.createdBy is string &&
-             data.homeTeamName is string &&
-             data.awayTeamName is string &&
-             data.createdAt is timestamp &&
-             data.updatedAt is timestamp &&
-             (!('quarterLengthAtGame' in data) || data.quarterLengthAtGame is int) &&
-             (!('homeStats' in data) || data.homeStats is map) &&
-             (!('awayStats' in data) || data.awayStats is map);
-    }
-
-    function isValidTeamStats(data) {
-      return data.teamId is string &&
-             data.seasonYear is int &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp);
+      return data.name is string && data.name.size() > 0;
     }
 
     function isValidTeam(data) {
-      return (!('name' in data) || data.name is string) &&
-             (!('leagueId' in data) || data.leagueId is string) &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp) &&
-             (!('stadiumName' in data) || data.stadiumName is string) &&
-             (!('city' in data) || data.city is string) &&
-             (!('state' in data) || data.state is string);
+      return data.name is string && data.school is string;
     }
 
-    function isValidCoach(data) {
-      return data.keys().hasAll(['leagueId', 'name', 'role']) &&
-             data.leagueId is string &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.role in ['HC', 'OC', 'DC', 'Unassigned'] &&
-             (!('teamId' in data) || data.teamId == null || data.teamId is string) &&
-             (!('userId' in data) || data.userId == null || data.userId is string) &&
-             (!('careerWins' in data) || data.careerWins is int) &&
-             (!('careerLosses' in data) || data.careerLosses is int) &&
-             (!('schoolWins' in data) || data.schoolWins is int) &&
-             (!('schoolLosses' in data) || data.schoolLosses is int) &&
-             (!('createdAt' in data) || data.createdAt is timestamp) &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp);
-    }
-
-    function isValidPoll(data) {
-      return data.keys().hasAll(['leagueId', 'seasonYear', 'week', 'pollType', 'rankings', 'createdAt', 'updatedAt']) &&
-             data.leagueId is string &&
-             data.seasonYear is int &&
-             data.week is int &&
-             data.pollType in ['Media', 'Coaches', 'CFP'] &&
-             data.rankings is list &&
-             data.rankings.size() == 25 &&
-             data.createdAt is timestamp &&
-             data.updatedAt is timestamp;
-    }
-
-    function isValidRequest(data) {
-      return data.keys().hasAll(['userId', 'school', 'role', 'status']) &&
-             data.userId == request.auth.uid &&
-             data.school is string && data.school.size() > 0 &&
-             data.role in ['HC', 'OC', 'DC'] &&
-             data.status == 'pending' &&
-             (!('firstName' in data) || data.firstName is string) &&
-             (!('lastName' in data) || data.lastName is string) &&
-             (!('logoId' in data) || data.logoId == null || data.logoId is string || data.logoId is int);
-    }
-
-    function isValidPlayer(data) {
-      return data.name is string &&
-             data.pos is string &&
-             data.teamId is string &&
-             data.leagueId is string &&
-             (!('number' in data) || data.number is int) &&
-             (!('height' in data) || data.height is string) &&
-             (!('weight' in data) || data.weight is int) &&
-             (!('year' in data) || data.year is string) &&
-             (!('redshirt' in data) || data.redshirt is bool) &&
-             (!('ovr' in data) || data.ovr is int) &&
-             (!('isActive' in data) || data.isActive is bool) &&
-             (!('archetype' in data) || data.archetype is string) &&
-             (!('physicalAbilities' in data) || data.physicalAbilities is list) &&
-             (!('mentalAbilities' in data) || data.mentalAbilities is list) &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp) &&
-             (!('createdAt' in data) || data.createdAt is timestamp) &&
-             (!('seasonPassYds' in data) || isNumber(data.seasonPassYds)) &&
-             (!('seasonPassTDs' in data) || isNumber(data.seasonPassTDs)) &&
-             (!('seasonPassInts' in data) || isNumber(data.seasonPassInts)) &&
-             (!('seasonRushYds' in data) || isNumber(data.seasonRushYds)) &&
-             (!('seasonRushTDs' in data) || isNumber(data.seasonRushTDs)) &&
-             (!('seasonRecYds' in data) || isNumber(data.seasonRecYds)) &&
-             (!('seasonRecTDs' in data) || isNumber(data.seasonRecTDs)) &&
-             (!('seasonReceptions' in data) || isNumber(data.seasonReceptions)) &&
-             (!('seasonTackles' in data) || isNumber(data.seasonTackles)) &&
-             (!('seasonSacks' in data) || isNumber(data.seasonSacks)) &&
-             (!('seasonInts' in data) || isNumber(data.seasonInts)) &&
-             (!('seasonFumblesForced' in data) || isNumber(data.seasonFumblesForced)) &&
-             (!('seasonFumblesRec' in data) || isNumber(data.seasonFumblesRec)) &&
-             (!('seasonDefTDs' in data) || isNumber(data.seasonDefTDs));
-    }
-
-    function isValidActivityLog(data) {
-      return data.keys().hasAll(['leagueId', 'type', 'title', 'description', 'timestamp', 'metadata']) &&
-             data.leagueId is string &&
-             data.type in ['game_result', 'recruiting_commit', 'league_event'] &&
-             data.title is string &&
-             data.description is string &&
-             data.timestamp is timestamp &&
-             data.metadata is map;
+    function isValidGame(data) {
+      return data.leagueId is string && data.season is int;
     }
 
     function isValidUser(data) {
-      return data.keys().hasAll(['email', 'displayName']) &&
-             data.email is string &&
-             data.displayName is string;
-    }
-
-    function isValidGlobalTeam(data) {
-      return data.keys().hasAll(['name', 'logoId', 'conference', 'color']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.conference is string &&
-             data.color is string &&
-             (!('isFCS' in data) || data.isFCS is bool) &&
-             (!('logoId' in data) || data.logoId == null || data.logoId is string || data.logoId is int) &&
-             (!('createdAt' in data) || data.createdAt is string || data.createdAt is timestamp);
+      return data.email is string;
     }
 
     function isValidProspect(data) {
-      return data.keys().hasAll(['name', 'pos', 'stars', 'leagueId', 'createdAt']) &&
-             data.name is string && data.name.size() > 0 &&
-             data.pos is string &&
-             data.stars is int && data.stars >= 1 && data.stars <= 5 &&
-             data.leagueId is string &&
-             data.createdAt is timestamp &&
-             (!('archetype' in data) || data.archetype is string) &&
-             (!('hometown' in data) || data.hometown is string) &&
-             (!('state' in data) || data.state is string) &&
-             (!('height' in data) || data.height is string) &&
-             (!('weight' in data) || data.weight is int) &&
-             (!('ovr' in data) || data.ovr is int) &&
-             (!('commitStatus' in data) || data.commitStatus in ['Uncommitted', 'Committed']) &&
-             (!('committedTo' in data) || data.committedTo is string) &&
-             (!('committedByUserId' in data) || data.committedByUserId is string) &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp);
+      return data.name is string;
     }
 
-    function isValidTarget(data) {
-      return data.keys().hasAll(['name', 'pos', 'stars', 'leagueId', 'teamId', 'scoutingStatus', 'priority', 'createdAt', 'updatedAt']) &&
-             data.name is string &&
-             data.pos is string &&
-             data.stars is int &&
-             data.leagueId is string &&
-             data.teamId is string &&
-             data.scoutingStatus in ['Normal', 'Gem', 'Bust'] &&
-             data.priority in ['Low', 'Med', 'High', 'Top Target'] &&
-             data.createdAt is timestamp &&
-             data.updatedAt is timestamp &&
-             (!('notes' in data) || data.notes is string) &&
-             (!('topSchools' in data) || data.topSchools is string) &&
-             (!('prospectId' in data) || data.prospectId is string);
+    function isValidPlayer(data) {
+      return data.name is string;
+    }
+
+    function isValidTeamStats(data) {
+      return data.teamId is string && data.seasonYear is int;
     }
 
     // Rules
     match /leagues/{leagueId} {
       allow get, list: if isAuthenticated();
       allow create: if isAuthenticated() && isValidLeague(request.resource.data);
-      allow update: if isLeagueOwner(leagueId) && isValidLeague(request.resource.data);
-      allow delete: if isOwner(resource.data.ownerId);
+      allow update: if (isLeagueOwner(leagueId) || isAdmin()) && isValidLeague(request.resource.data);
+      allow delete: if canDeleteLeagueData(leagueId);
 
       match /seasons/{seasonId} {
         allow read: if isAuthenticated();
-        allow write: if isLeagueOwner(leagueId);
+        allow write: if isLeagueOwner(leagueId) || isAdmin();
+        allow delete: if canDeleteLeagueData(leagueId);
       }
 
       match /teams/{teamId} {
         allow read: if isAuthenticated();
-        allow create: if (isLeagueOwner(leagueId) || (isAuthenticated() && request.resource.data.ownerId == 'cpu')) && isValidTeam(request.resource.data);
-        allow update: if isLeagueOwner(leagueId) && isValidTeam(request.resource.data);
-        allow delete: if isLeagueOwner(leagueId);
+        allow create: if (isLeagueOwner(leagueId) || isAdmin() || (isAuthenticated() && request.resource.data.ownerId == 'cpu')) && isValidTeam(request.resource.data);
+        allow update: if (isLeagueOwner(leagueId) || isAdmin()) && isValidTeam(request.resource.data);
+        allow delete: if canDeleteLeagueData(leagueId);
+
+        match /targets/{targetId} {
+          allow read: if isAuthenticated();
+          allow write: if isLeagueOwner(leagueId) || isAdmin();
+          allow delete: if canDeleteLeagueData(leagueId);
+        }
       }
 
       match /members/{memberId} {
         allow read: if isAuthenticated();
-        allow write: if isLeagueOwner(leagueId) || isOwner(memberId);
+        allow write: if isLeagueOwner(leagueId) || isOwner(memberId) || isAdmin();
+        allow delete: if canDeleteLeagueData(leagueId);
       }
 
       match /requests/{requestId} {
-        allow read: if isLeagueOwner(leagueId) || isOwner(requestId);
-        allow create: if isAuthenticated() && isValidRequest(request.resource.data);
-        allow update: if isLeagueOwner(leagueId);
-        allow delete: if isLeagueOwner(leagueId) || isOwner(requestId);
+        allow read: if isLeagueOwner(leagueId) || isOwner(requestId) || isAdmin();
+        allow create: if isAuthenticated();
+        allow update: if isLeagueOwner(leagueId) || isAdmin();
+        allow delete: if isLeagueOwner(leagueId) || isOwner(requestId) || isAdmin() || canDeleteLeagueData(leagueId);
       }
 
       match /stats/{statId} {
         allow read: if isAuthenticated();
-        allow write: if isLeagueOwner(leagueId);
+        allow write: if isLeagueOwner(leagueId) || isAdmin();
+        allow delete: if canDeleteLeagueData(leagueId);
       }
 
       match /games/{gameId} {
         allow read: if isAuthenticated();
         allow create: if isAuthenticated() && isValidGame(request.resource.data);
         allow update: if isAuthenticated() && isValidGame(request.resource.data);
-        allow delete: if isLeagueOwner(leagueId);
+        allow delete: if isLeagueOwner(leagueId) || isAdmin() || canDeleteLeagueData(leagueId);
       }
 
       match /players/{playerId} {
         allow read: if isAuthenticated();
         allow create, update: if isAuthenticated() && isValidPlayer(request.resource.data);
-        allow delete: if isLeagueOwner(leagueId) || 
-                        (isAuthenticated() && 
-                         exists(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(resource.data.teamId)) && 
-                         get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(resource.data.teamId)).data.ownerId == request.auth.uid);
+        allow delete: if isLeagueOwner(leagueId) || isAdmin() || canDeleteLeagueData(leagueId);
       }
 
       match /team_stats/{statId} {
         allow read: if isAuthenticated();
-        allow write: if isLeagueOwner(leagueId) && isValidTeamStats(request.resource.data);
+        allow write: if (isLeagueOwner(leagueId) || isAdmin()) && isValidTeamStats(request.resource.data);
+        allow delete: if canDeleteLeagueData(leagueId);
       }
 
       match /playerStats/{statId} {
         allow read: if isAuthenticated();
         allow write: if isAuthenticated();
+        allow delete: if canDeleteLeagueData(leagueId);
       }
 
       match /prospects/{prospectId} {
         allow read: if isAuthenticated();
         allow create: if isAuthenticated() && isValidProspect(request.resource.data);
-        allow update: if isAuthenticated() && (
-          isLeagueOwner(leagueId) || 
-          (resource.data.commitStatus != 'Committed') ||
-          (resource.data.committedTo == get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(get(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)).data.teamId)).data.school) ||
-          (resource.data.committedByUserId == request.auth.uid)
-        ) && isValidProspect(request.resource.data);
-        allow delete: if isLeagueOwner(leagueId);
-      }
-
-      match /teams/{teamId}/targets/{targetId} {
-        allow read: if isAuthenticated() && 
-                      (get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(teamId)).data.ownerId == request.auth.uid ||
-                       isLeagueOwner(leagueId));
-        allow create, update: if isAuthenticated() && 
-                       (get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(teamId)).data.ownerId == request.auth.uid ||
-                        isLeagueOwner(leagueId)) &&
-                       isValidTarget(request.resource.data);
-        allow delete: if isAuthenticated() && 
-                       (get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(teamId)).data.ownerId == request.auth.uid ||
-                        isLeagueOwner(leagueId));
+        allow update: if isAuthenticated() && (isLeagueOwner(leagueId) || isAdmin() || resource.data.commitStatus != 'Committed');
+        allow delete: if isLeagueOwner(leagueId) || isAdmin() || canDeleteLeagueData(leagueId);
       }
 
       match /activity_logs/{logId} {
         allow read: if isAuthenticated();
-        allow create: if isAuthenticated() && isValidActivityLog(request.resource.data);
-        allow update, delete: if isLeagueOwner(leagueId);
+        allow create: if isAuthenticated();
+        allow update, delete: if isLeagueOwner(leagueId) || isAdmin() || canDeleteLeagueData(leagueId);
       }
     }
     
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId) && isValidUser(request.resource.data);
+      allow write: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);
     }
 
     match /teams/{teamId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() && isValidGlobalTeam(request.resource.data);
+      allow write: if isAdmin();
     }
 
     match /coaches/{coachId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isLeagueOwner(request.resource.data.leagueId) && isValidCoach(request.resource.data);
+      allow create, update: if isAuthenticated() && (isLeagueOwner(request.resource.data.leagueId) || isLeagueOwner(resource.data.leagueId) || isAdmin());
+      allow delete: if isAuthenticated() && (
+        isLeagueOwner(resource.data.leagueId) ||
+        get(/databases/$(database)/documents/leagues/$(resource.data.leagueId)/members/$(request.auth.uid)).data.permissions.canDeleteCoaches == true ||
+        get(/databases/$(database)/documents/leagues/$(resource.data.leagueId)/members/$(request.auth.uid)).data.permissions.canDeleteLeague == true ||
+        isAdmin()
+      );
     }
 
     match /polls/{pollId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isLeagueOwner(request.resource.data.leagueId) && isValidPoll(request.resource.data);
+      allow write: if isAuthenticated() && (isLeagueOwner(request.resource.data.leagueId) || isAdmin());
+      allow delete: if isAuthenticated() && canDeleteLeagueData(resource.data.leagueId);
     }
 
     // Collection Group Rules

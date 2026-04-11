@@ -25,7 +25,7 @@ export const StatTicker: React.FC = () => {
       topTeams.forEach(team => {
         items.push({
           category: cat.label,
-          team: team.name.toUpperCase(),
+          team: (team.name || '').toUpperCase(),
           value: cat.format(team[cat.key as keyof typeof team] as number),
         });
       });

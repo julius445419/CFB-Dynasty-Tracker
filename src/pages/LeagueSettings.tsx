@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLeague } from '../context/LeagueContext';
+import { useNavigate } from 'react-router-dom';
 import { 
   collection,
   query,
@@ -8,20 +9,25 @@ import {
   writeBatch,
   serverTimestamp,
   doc, 
-  updateDoc 
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Save, Edit2, X, Lock, Shield, Clock, Settings2, AlertCircle, Loader2, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Save, Edit2, X, Lock, Shield, Clock, Settings2, AlertCircle, Loader2, RefreshCw, CheckCircle2, Trash2 } from 'lucide-react';
 import { LeagueSettings as ILeagueSettings } from '../types';
 
 export const LeagueSettings: React.FC = () => {
-  const { leagueInfo, userRole } = useLeague();
+  const { leagueInfo, userRole, userPermissions } = useLeague();
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentYear, setCurrentYear] = useState<number>(leagueInfo?.currentYear || 2025);
   const [currentWeek, setCurrentWeek] = useState<number>(leagueInfo?.currentWeek ?? 0);
   const [seasonPhase, setSeasonPhase] = useState<string>(leagueInfo?.seasonPhase || 'Off Season');
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeletingLeague, setIsDeletingLeague] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePasscode, setDeletePasscode] = useState('');
   const [shouldMigrateGames, setShouldMigrateGames] = useState(true);
   const [syncStatus, setSyncStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [confirmSync, setConfirmSync] = useState(false);
@@ -58,6 +64,8 @@ export const LeagueSettings: React.FC = () => {
     userPlayerTransferChance: 50,
     cpuPlayerTransferChance: 50,
   });
+
+  const [showPasscode, setShowPasscode] = useState(false);
 
   const isAdmin = userRole === 'Owner' || userRole === 'Commissioner';
 
@@ -184,6 +192,87 @@ export const LeagueSettings: React.FC = () => {
     setError(null);
     setConfirmSync(false);
     setIsEditing(false);
+  };
+
+  const handleDeleteLeague = async () => {
+    if (!leagueInfo?.id) return;
+    
+    // If passcode is missing, allow "DELETE" as a fallback
+    const effectivePasscode = leagueInfo.passcode || 'DELETE';
+    const isConfirmed = deletePasscode === leagueInfo.passcode || 
+                       (!leagueInfo.passcode && deletePasscode.toUpperCase() === 'DELETE');
+
+    if (!isConfirmed) {
+      setError(leagueInfo.passcode 
+        ? "Incorrect passcode. League deletion aborted." 
+        : "Please type 'DELETE' to confirm deletion of this league.");
+      return;
+    }
+
+    setIsDeletingLeague(true);
+    setError(null);
+
+    try {
+      const leagueId = leagueInfo.id;
+      
+      // Helper to delete all docs in a collection/query
+      const deleteCollection = async (pathOrQuery: any) => {
+        const snapshot = await getDocs(pathOrQuery);
+        let batch = writeBatch(db);
+        let count = 0;
+        
+        for (const docSnap of snapshot.docs) {
+          batch.delete(docSnap.ref);
+          count++;
+          // Firestore rules have a limit of 20 get/exists calls per batch.
+          // canDeleteLeagueData uses up to 3 calls (get league, exists member, get member).
+          // So we must limit batch size to 6. Let's use 5 to be safe.
+          if (count >= 5) {
+            await batch.commit();
+            batch = writeBatch(db);
+            count = 0;
+          }
+        }
+        if (count > 0) await batch.commit();
+      };
+
+      // 1. Delete top-level linked data
+      await deleteCollection(query(collection(db, 'coaches'), where('leagueId', '==', leagueId)));
+      await deleteCollection(query(collection(db, 'polls'), where('leagueId', '==', leagueId)));
+
+      // 2. Delete sub-subcollections (Targets)
+      const teamsSnap = await getDocs(collection(db, 'leagues', leagueId, 'teams'));
+      for (const teamDoc of teamsSnap.docs) {
+        await deleteCollection(collection(db, 'leagues', leagueId, 'teams', teamDoc.id, 'targets'));
+      }
+
+      // 3. Delete subcollections
+      const subcollections = [
+        'members', 
+        'teams', 
+        'games', 
+        'requests', 
+        'seasons', 
+        'stats', 
+        'prospects', 
+        'activity_logs',
+        'team_stats',
+        'playerStats'
+      ];
+      for (const sub of subcollections) {
+        await deleteCollection(collection(db, 'leagues', leagueId, sub));
+      }
+
+      // 4. Delete the league document itself
+      await deleteDoc(doc(db, 'leagues', leagueId));
+
+      alert("League successfully deleted.");
+      navigate('/portal');
+    } catch (err: any) {
+      console.error("Error deleting league:", err);
+      setError(`Failed to delete league: ${err.message}`);
+      setIsDeletingLeague(false);
+    }
   };
 
   if (!leagueInfo) return <div>Loading...</div>;
@@ -545,7 +634,132 @@ export const LeagueSettings: React.FC = () => {
             placeholder="Enter house rules here..."
           />
         </div>
+
+        {/* Danger Zone */}
+        {(userRole === 'Owner' || userPermissions?.canDeleteLeague) && (
+          <div className="bg-red-950/10 p-8 rounded-[32px] border border-red-900/20 space-y-6 shadow-xl">
+            <div className="flex items-center gap-3 mb-2">
+              <AlertCircle className="w-6 h-6 text-red-500" />
+              <h2 className="text-xl font-black text-white uppercase italic tracking-tight">Danger <span className="text-red-500">Zone</span></h2>
+            </div>
+            
+            <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-2xl space-y-4">
+              <div className="space-y-1">
+                <h3 className="text-red-500 font-bold uppercase tracking-widest text-xs">Delete Dynasty</h3>
+                <p className="text-zinc-500 text-[10px] font-medium leading-relaxed">
+                  Permanently remove this league and all associated data including teams, members, games, and history. This action is irreversible.
+                </p>
+              </div>
+
+              {(userRole === 'Owner' || userPermissions?.canDeleteLeague) && (
+                <div className="space-y-3">
+                  <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Shield size={12} className="text-zinc-600" />
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">League ID</span>
+                    </div>
+                    <span className="text-xs font-mono font-black text-white tracking-wider bg-zinc-800 px-2 py-1 rounded-lg border border-zinc-700 select-all cursor-pointer" title="Click to select">
+                      {leagueInfo.id}
+                    </span>
+                  </div>
+                  
+                  <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Lock size={12} className="text-zinc-600" />
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Current Passcode</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-mono font-black tracking-wider bg-zinc-800 px-3 py-1.5 rounded-lg border border-zinc-700 select-all transition-all ${leagueInfo.passcode ? 'text-white' : 'text-red-500/50'}`}>
+                        {leagueInfo.passcode ? (showPasscode ? leagueInfo.passcode : '••••••') : 'NO PASSCODE SET'}
+                      </span>
+                      {leagueInfo.passcode && (
+                        <button 
+                          onClick={() => setShowPasscode(!showPasscode)}
+                          className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-colors"
+                        >
+                          {showPasscode ? <RefreshCw size={14} /> : <Edit2 size={14} />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="px-6 py-3 bg-red-600/10 text-red-500 border border-red-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all"
+              >
+                Delete League
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <div 
+            className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            onClick={() => !isDeletingLeague && setShowDeleteConfirm(false)}
+          />
+          <div className="relative w-full max-w-md bg-zinc-900 border border-red-900/30 rounded-[40px] p-8 shadow-2xl space-y-8">
+            <div className="text-center space-y-4">
+              <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
+                <Trash2 className="w-10 h-10 text-red-500" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-black text-white uppercase italic tracking-tight">Delete <span className="text-red-500">Dynasty?</span></h2>
+                <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest leading-relaxed">
+                  This will permanently erase <span className="text-white">{leagueInfo.name}</span>.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">
+                  {leagueInfo.passcode ? 'Enter League Passcode to Confirm' : 'Type "DELETE" to Confirm'}
+                </label>
+                <input
+                  type="text"
+                  value={deletePasscode}
+                  onChange={(e) => setDeletePasscode(e.target.value)}
+                  placeholder={leagueInfo.passcode ? "League Passcode" : "Type DELETE"}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all text-center"
+                />
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={handleDeleteLeague}
+                  disabled={isDeletingLeague || !deletePasscode}
+                  className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg shadow-red-600/20 flex items-center justify-center gap-3"
+                >
+                  {isDeletingLeague ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Deleting League...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={18} />
+                      Confirm Permanent Deletion
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeletingLeague}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

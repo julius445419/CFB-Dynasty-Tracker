@@ -20,6 +20,7 @@ import {
   query, 
   where, 
   doc, 
+  getDoc,
   setDoc, 
   updateDoc, 
   deleteDoc, 
@@ -28,10 +29,61 @@ import {
   orderBy,
   limit as firestoreLimit
 } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { db, auth } from '../../firebase';
 import { useLeague } from '../../context/LeagueContext';
 import { CarouselCoach, TeamAssignment, Poll } from '../../types';
 import { useNavigate } from 'react-router-dom';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 const ManageCoaches: React.FC = () => {
   const { currentLeagueId, leagueInfo } = useLeague();
@@ -46,6 +98,7 @@ const ManageCoaches: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCoach, setEditingCoach] = useState<CarouselCoach | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [userPermissions, setUserPermissions] = useState<any>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -66,6 +119,15 @@ const ManageCoaches: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Fetch User Permissions
+      if (auth.currentUser && currentLeagueId) {
+        const memberRef = doc(db, 'leagues', currentLeagueId, 'members', auth.currentUser.uid);
+        const memberSnap = await getDoc(memberRef);
+        if (memberSnap.exists()) {
+          setUserPermissions(memberSnap.data().permissions || {});
+        }
+      }
+
       // Fetch Coaches
       const coachesRef = collection(db, 'coaches');
       const coachesQuery = query(coachesRef, where('leagueId', '==', currentLeagueId));
@@ -189,13 +251,17 @@ const ManageCoaches: React.FC = () => {
       setIsModalOpen(false);
       fetchData();
     } catch (error) {
-      console.error('Error saving coach:', error);
+      handleFirestoreError(error, OperationType.WRITE, 'coaches/batch');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDeleteCoach = async (coach: CarouselCoach) => {
+    if (!canDelete) {
+      alert("You do not have permission to delete personas.");
+      return;
+    }
     if (!window.confirm(`Are you sure you want to delete ${coach.name}?`)) return;
     if (!currentLeagueId) return;
 
@@ -215,7 +281,7 @@ const ManageCoaches: React.FC = () => {
       await batch.commit();
       fetchData();
     } catch (error) {
-      console.error('Error deleting coach:', error);
+      handleFirestoreError(error, OperationType.DELETE, `coaches/${coach.id}`);
     }
   };
 
@@ -260,6 +326,10 @@ const ManageCoaches: React.FC = () => {
       prev.includes(conf) ? prev.filter(c => c !== conf) : [...prev, conf]
     );
   };
+
+  const canDelete = leagueInfo?.ownerId === auth.currentUser?.uid || 
+                    userPermissions?.canDeleteCoaches === true || 
+                    auth.currentUser?.email === 'julius445419@gmail.com';
 
   const filteredCoaches = coaches.filter(c => {
     const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -429,12 +499,14 @@ const ManageCoaches: React.FC = () => {
                   >
                     <Edit2 size={16} />
                   </button>
-                  <button
-                    onClick={() => handleDeleteCoach(coach)}
-                    className="p-2 bg-zinc-800 hover:bg-red-900/30 text-zinc-400 hover:text-red-500 rounded-xl transition-all"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDeleteCoach(coach)}
+                      className="p-2 bg-zinc-800 hover:bg-red-900/30 text-zinc-400 hover:text-red-500 rounded-xl transition-all"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -475,9 +547,10 @@ const ManageCoaches: React.FC = () => {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-[40px] shadow-2xl overflow-hidden"
+              className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[85vh]"
             >
-              <div className="p-8 space-y-8">
+              {/* Header - Sticky */}
+              <div className="p-6 sm:p-8 border-b border-zinc-800/50 shrink-0">
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-2xl font-black text-white uppercase italic tracking-tight">
@@ -487,14 +560,18 @@ const ManageCoaches: React.FC = () => {
                   </div>
                   <button
                     onClick={() => setIsModalOpen(false)}
-                    className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-full transition-all"
+                    className="p-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-full transition-all hover:text-white"
+                    aria-label="Close modal"
                   >
                     <X size={20} />
                   </button>
                 </div>
+              </div>
 
-                <form onSubmit={handleSaveCoach} className="space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* Body - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6 sm:p-8 pt-4 sm:pt-6 custom-scrollbar">
+                <form id="coach-form" onSubmit={handleSaveCoach} className="space-y-6 pb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Full Name</label>
                       <input
@@ -535,7 +612,7 @@ const ManageCoaches: React.FC = () => {
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Career W</label>
                       <input
@@ -573,27 +650,29 @@ const ManageCoaches: React.FC = () => {
                       />
                     </div>
                   </div>
-
-                  <div className="pt-4">
-                    <button
-                      type="submit"
-                      disabled={isSaving}
-                      className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg shadow-orange-600/20 flex items-center justify-center gap-3"
-                    >
-                      {isSaving ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Saving Coach...
-                        </>
-                      ) : (
-                        <>
-                          <Save size={18} />
-                          {editingCoach ? 'Update Coach' : 'Create Coach'}
-                        </>
-                      )}
-                    </button>
-                  </div>
                 </form>
+              </div>
+
+              {/* Footer - Sticky */}
+              <div className="p-6 sm:p-8 border-t border-zinc-800/50 bg-zinc-900/50 backdrop-blur-md shrink-0">
+                <button
+                  type="submit"
+                  form="coach-form"
+                  disabled={isSaving}
+                  className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg shadow-orange-600/20 flex items-center justify-center gap-3 active:scale-[0.98]"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving Coach...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={18} />
+                      {editingCoach ? 'Update Coach' : 'Create Coach'}
+                    </>
+                  )}
+                </button>
               </div>
             </motion.div>
           </div>

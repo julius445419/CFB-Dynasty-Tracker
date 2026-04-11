@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 interface AuthContextType {
@@ -19,13 +19,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (user) {
         // Sync profile to Firestore
         const userRef = doc(db, 'users', user.uid);
-        await setDoc(userRef, {
-          displayName: user.displayName || user.email?.split('@')[0] || 'Unknown User',
+        const userSnap = await getDoc(userRef);
+        const emailPrefix = user.email?.split('@')[0] || 'user';
+        
+        const userData: any = {
+          displayName: user.displayName || emailPrefix,
           email: user.email,
           photoURL: user.photoURL,
           lastLogin: serverTimestamp(),
           updatedAt: serverTimestamp()
-        }, { merge: true });
+        };
+
+        // AC1 & AC2: Set systemName if it doesn't exist (new or migration)
+        if (!userSnap.exists() || !userSnap.data()?.systemName) {
+          userData.systemName = emailPrefix;
+        }
+
+        await setDoc(userRef, userData, { merge: true });
       }
       setUser(user);
       setLoading(false);

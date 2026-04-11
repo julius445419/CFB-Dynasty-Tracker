@@ -5,7 +5,16 @@ import { db } from '../firebase';
 
 export type UserRole = 'Owner' | 'Commissioner' | 'Player' | 'Unassigned';
 
-import { LeagueSettings } from '../types';
+import { 
+  League, 
+  LeagueMember, 
+  TeamAssignment, 
+  Game, 
+  TeamStats, 
+  PlayerGameStats,
+  UserProfile,
+  LeagueSettings
+} from '../types';
 
 interface LeagueInfo {
   id: string;
@@ -14,23 +23,21 @@ interface LeagueInfo {
   seasonPhase: string;
   currentYear: number;
   currentWeek: number;
+  passcode?: string;
   settings?: LeagueSettings;
 }
 
-interface UserTeam {
+interface UserTeam extends TeamAssignment {
   id: string;
-  school: string;
   role: string;
-  coachName?: string;
   firstName?: string;
   lastName?: string;
-  logoId?: string | number;
-  conference?: string;
 }
 
 interface LeagueContextType {
   currentLeagueId: string | null;
   userRole: UserRole;
+  userPermissions: LeagueMember['permissions'];
   leagueInfo: LeagueInfo | null;
   userTeam: UserTeam | null;
   loading: boolean;
@@ -47,9 +54,16 @@ export const LeagueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return localStorage.getItem('activeLeagueId');
   });
   const [userRole, setUserRole] = useState<UserRole>('Unassigned');
+  const [userPermissions, setUserPermissions] = useState<LeagueMember['permissions']>({});
   const [leagueInfo, setLeagueInfo] = useState<LeagueInfo | null>(null);
   const [userTeam, setUserTeam] = useState<UserTeam | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const effectiveRole = React.useMemo(() => {
+    if (!user || !leagueInfo) return 'Unassigned';
+    if (leagueInfo.ownerId === user.uid || user.email === 'julius445419@gmail.com') return 'Owner';
+    return userRole;
+  }, [user, leagueInfo, userRole]);
 
   const selectLeague = (leagueId: string) => {
     setCurrentLeagueId(leagueId);
@@ -87,14 +101,10 @@ export const LeagueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           seasonPhase: data.seasonPhase || 'Off Season',
           currentYear: typeof data.currentYear === 'number' && !isNaN(data.currentYear) ? data.currentYear : 2025,
           currentWeek: typeof data.currentWeek === 'number' && !isNaN(data.currentWeek) ? data.currentWeek : 0,
+          passcode: data.passcode,
           settings: data.settings,
         };
         setLeagueInfo(info);
-        
-        // If user is the owner, set role immediately if not already set by member doc
-        if (data.ownerId === user.uid) {
-          setUserRole('Owner');
-        }
       } else {
         setCurrentLeagueId(null);
         localStorage.removeItem('activeLeagueId');
@@ -105,33 +115,44 @@ export const LeagueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // 2. Listen to Member Document for Role
     const unsubscribeMember = onSnapshot(memberRef, (memberDoc) => {
       if (memberDoc.exists()) {
-        const role = memberDoc.data().role;
-        // Map firestore role to UserRole type
+        const data = memberDoc.data();
+        const role = data.role || 'Player';
+        const permissions = data.permissions || {};
         const mappedRole = (role.charAt(0).toUpperCase() + role.slice(1)) as UserRole;
+        
         setUserRole(mappedRole);
+        setUserPermissions(permissions);
       } else {
-        // Only set to Unassigned if not the owner (who was set in league listener)
-        setUserRole(prev => {
-          if (leagueInfo?.ownerId === user.uid) return 'Owner';
-          return 'Unassigned';
-        });
+        setUserRole('Unassigned');
+        setUserPermissions({});
       }
     });
 
-    // 3. Listen to Team Document
-    const coachRef = doc(db, 'leagues', currentLeagueId, 'teams', user.uid);
-    const unsubscribeTeam = onSnapshot(coachRef, (coachDoc) => {
-      if (coachDoc.exists()) {
+    // 3. Listen to Team Document (Query by ownerId)
+    const teamsRef = collection(db, 'leagues', currentLeagueId, 'teams');
+    const q = query(teamsRef, where('ownerId', '==', user.uid), limit(1));
+    
+    const unsubscribeTeam = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        const coachDoc = snapshot.docs[0];
         const teamData = coachDoc.data();
         setUserTeam({
           id: coachDoc.id,
+          name: teamData.name || teamData.school,
           school: teamData.school || teamData.name,
           role: teamData.role || teamData.coachRole,
+          coachRole: teamData.coachRole || teamData.role,
           coachName: teamData.coachName,
           firstName: teamData.firstName,
           lastName: teamData.lastName,
           logoId: teamData.logoId,
-          conference: teamData.conference
+          conference: teamData.conference,
+          leagueId: currentLeagueId,
+          ownerId: teamData.ownerId,
+          color: teamData.color,
+          assignmentStatus: teamData.assignmentStatus,
+          contractStart: teamData.contractStart,
+          createdAt: teamData.createdAt
         });
       } else {
         setUserTeam(null);
@@ -149,7 +170,8 @@ export const LeagueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   return (
     <LeagueContext.Provider value={{ 
       currentLeagueId, 
-      userRole, 
+      userRole: effectiveRole, 
+      userPermissions,
       leagueInfo, 
       userTeam,
       loading,

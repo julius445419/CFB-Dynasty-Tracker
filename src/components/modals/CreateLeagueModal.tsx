@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Trophy, Shield, Gamepad2, Loader2 } from 'lucide-react';
-import { collection, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, setDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useLeague } from '../../context/LeagueContext';
+import { SCHOOLS } from '../../constants/schools';
+import { DEFAULT_COACHES } from '../../constants/defaultCoaches';
 
 interface CreateLeagueModalProps {
   isOpen: boolean;
@@ -61,6 +63,106 @@ export const CreateLeagueModal: React.FC<CreateLeagueModalProps> = ({ isOpen, on
         displayName: user.displayName || 'Coach',
         joinedAt: serverTimestamp()
       });
+
+      // --- SEED DEFAULT TEAMS AND COACHES ---
+      const teamIdMap: Record<string, string> = {};
+      const coachIdMap: Record<string, { HC?: string; OC?: string; DC?: string; offScheme?: string; defScheme?: string }> = {};
+      
+      // 1. Prepare Team IDs and Coach IDs
+      SCHOOLS.forEach(school => {
+        teamIdMap[school.name] = doc(collection(db, 'leagues', shortId, 'teams')).id;
+        coachIdMap[school.name] = {};
+      });
+
+      const coachDocs: any[] = [];
+      DEFAULT_COACHES.forEach(coach => {
+        if (teamIdMap[coach.school]) {
+          const coachRef = doc(collection(db, 'coaches'));
+          const coachId = coachRef.id;
+          
+          if (coach.role === 'HC') {
+            coachIdMap[coach.school].HC = coachId;
+            coachIdMap[coach.school].offScheme = coach.offensiveScheme;
+            coachIdMap[coach.school].defScheme = coach.defensiveScheme;
+          }
+          if (coach.role === 'OC') coachIdMap[coach.school].OC = coachId;
+          if (coach.role === 'DC') coachIdMap[coach.school].DC = coachId;
+
+          coachDocs.push({
+            ref: coachRef,
+            data: {
+              id: coachId,
+              leagueId: shortId,
+              name: `${coach.firstName} ${coach.lastName}`,
+              role: coach.role,
+              teamId: teamIdMap[coach.school],
+              prestige: coach.prestige,
+              level: coach.level,
+              archetype: coach.archetype,
+              offensiveScheme: coach.offensiveScheme,
+              defensiveScheme: coach.defensiveScheme,
+              careerWins: 0,
+              careerLosses: 0,
+              schoolWins: 0,
+              schoolLosses: 0,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            }
+          });
+        }
+      });
+
+      // 2. Execute Batches
+      let batch = writeBatch(db);
+      let count = 0;
+
+      // Add Teams
+      for (const school of SCHOOLS) {
+        const teamRef = doc(db, 'leagues', shortId, 'teams', teamIdMap[school.name]);
+        const ids = coachIdMap[school.name];
+        
+        batch.set(teamRef, {
+          ...school,
+          school: school.name,
+          leagueId: shortId,
+          ownerId: null,
+          assignmentStatus: 'Inactive',
+          isPlaceholder: false,
+          wins: 0,
+          losses: 0,
+          confWins: 0,
+          confLosses: 0,
+          headCoachId: ids.HC || null,
+          ocId: ids.OC || null,
+          dcId: ids.DC || null,
+          offensiveScheme: ids.offScheme || 'Spread',
+          defensiveScheme: ids.defScheme || '4-3',
+          createdAt: serverTimestamp()
+        });
+
+        count++;
+        if (count >= 400) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+
+      // Add Coaches
+      for (const coach of coachDocs) {
+        batch.set(coach.ref, coach.data);
+        count++;
+        if (count >= 400) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+
+      if (count > 0) {
+        await batch.commit();
+      }
+      // --- END SEEDING ---
       
       alert(`Dynasty Created! Your League ID is: ${shortId}. Share this and your passcode with your members.`);
 

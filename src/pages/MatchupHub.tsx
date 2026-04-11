@@ -908,9 +908,16 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, 
               <h3 className={`text-lg font-black uppercase italic tracking-tight leading-tight transition-colors ${awayWon ? 'text-orange-500' : 'text-white'}`}>
                 {awayTeam.name}
               </h3>
-              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                {awayTeam.wins}-{awayTeam.losses} • {awayTeam.conference}
-              </p>
+              <div className="flex flex-col">
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                  {awayTeam.wins}-{awayTeam.losses} • {awayTeam.conference}
+                </p>
+                {awayTeam.coachName && (
+                  <p className="text-[9px] font-black text-orange-500/60 uppercase tracking-tighter italic">
+                    Coach {awayTeam.coachName}
+                  </p>
+                )}
+              </div>
             </div>
             {isFinal && (
               <span className={`text-3xl font-black tabular-nums ${awayWon ? 'text-white' : 'text-zinc-600'}`}>
@@ -946,9 +953,16 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, 
               <h3 className={`text-lg font-black uppercase italic tracking-tight leading-tight transition-colors ${homeWon ? 'text-orange-500' : 'text-white'}`}>
                 {homeTeam.name}
               </h3>
-              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                {homeTeam.wins}-{homeTeam.losses} • {homeTeam.conference}
-              </p>
+              <div className="flex flex-col">
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                  {homeTeam.wins}-{homeTeam.losses} • {homeTeam.conference}
+                </p>
+                {homeTeam.coachName && (
+                  <p className="text-[9px] font-black text-orange-500/60 uppercase tracking-tighter italic">
+                    Coach {homeTeam.coachName}
+                  </p>
+                )}
+              </div>
             </div>
             {isFinal && (
               <span className={`text-3xl font-black tabular-nums ${homeWon ? 'text-white' : 'text-zinc-600'}`}>

@@ -42,16 +42,19 @@ export interface CarouselCoach {
 export interface TeamAssignment {
   id?: string;
   name: string;
-  coachName: string;
+  school?: string;
+  coachName?: string;
+  firstName?: string;
+  lastName?: string;
   coachRole: 'HC' | 'OC' | 'DC';
   leagueId: string;
   ownerId: string | null;
-  conference: string;
+  conference?: string;
   logoId?: number | string;
-  color: string;
-  assignmentStatus: 'Active' | 'Inactive';
-  contractStart: any;
-  createdAt: any;
+  color?: string;
+  assignmentStatus?: 'Active' | 'Inactive';
+  contractStart?: any;
+  createdAt?: any;
   isPlaceholder?: boolean;
   isFCS?: boolean;
   rank?: number;
@@ -80,6 +83,17 @@ export interface TeamAssignment {
   stadiumName?: string;
   city?: string;
   state?: string;
+  inviteCode?: string;
+}
+
+export interface UserProfile {
+  uid: string;
+  displayName: string;
+  systemName: string;
+  email: string;
+  photoURL?: string;
+  lastLogin: any;
+  updatedAt: any;
 }
 
 export interface Player {
@@ -284,6 +298,20 @@ export interface LeagueSettings {
   houseRules: string;
 }
 
+export interface LeagueMember {
+  id: string;
+  role: 'Owner' | 'Commissioner' | 'Player' | 'Unassigned';
+  displayName: string;
+  joinedAt: any;
+  permissions?: {
+    canEditSchedule?: boolean;
+    canEditStandings?: boolean;
+    canManageMembers?: boolean;
+    canEditPolls?: boolean;
+    canDeleteLeague?: boolean;
+  };
+}
+
 export interface League {
   id: string;
   name: string;
@@ -291,6 +319,7 @@ export interface League {
   currentYear: number;
   currentWeek: number;
   seasonPhase: 'Off Season' | 'Regular Season' | 'CFP Window';
+  passcode: string;
   createdAt: any;
   settings?: LeagueSettings;
 }

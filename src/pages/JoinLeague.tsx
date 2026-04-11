@@ -125,6 +125,18 @@ export const JoinLeague: React.FC = () => {
           inviteCode: null, // Invalidate code
           updatedAt: serverTimestamp()
         });
+
+        // Find the coach persona associated with this team
+        const coachesRef = collection(db, 'coaches');
+        const coachQuery = query(coachesRef, where('teamId', '==', coachDoc.id));
+        const coachSnap = await getDocs(coachQuery);
+        
+        if (!coachSnap.empty) {
+          batch.update(coachSnap.docs[0].ref, {
+            userId: user.uid,
+            updatedAt: serverTimestamp()
+          });
+        }
       }
 
       // Add user to league members (use merge: true to update existing docs)

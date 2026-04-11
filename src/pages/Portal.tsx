@@ -20,7 +20,8 @@ import {
   collectionGroup, 
   doc, 
   getDoc,
-  documentId
+  documentId,
+  limit
 } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { db, auth } from '../firebase';
@@ -88,9 +89,10 @@ export const Portal: React.FC = () => {
               const memberData = memberDoc.data();
               
               // Check if user has a team in this league to get the school name
-              const teamRef = doc(db, 'leagues', leagueId, 'teams', user.uid);
-              const teamSnap = await getDoc(teamRef);
-              const teamData = teamSnap.exists() ? teamSnap.data() : null;
+              const teamsRef = collection(db, 'leagues', leagueId, 'teams');
+              const teamQuery = query(teamsRef, where('ownerId', '==', user.uid), limit(1));
+              const teamSnap = await getDocs(teamQuery);
+              const teamData = !teamSnap.empty ? teamSnap.docs[0].data() : null;
 
               foundLeagues.set(leagueId, {
                 id: leagueId,

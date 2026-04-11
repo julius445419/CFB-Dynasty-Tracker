@@ -26,6 +26,8 @@ import ScheduleManagement from './pages/admin/ScheduleManagement';
 import ManageCoaches from './pages/admin/ManageCoaches';
 import { ManagePolls } from './pages/admin/ManagePolls';
 import { BulkStatEntry } from './pages/admin/BulkStatEntry';
+import { LabProvider } from './carousel-lab/LabContext';
+import LabDashboard from './carousel-lab/LabDashboard';
 import { Programs } from './pages/Programs';
 import { Standings } from './pages/Standings';
 import { StatLeaders } from './pages/StatLeaders';
@@ -124,6 +126,13 @@ export default function App() {
                 <Route path="admin/bulk-stats" element={
                   <RoleGate allowedRoles={['Owner', 'Commissioner']}>
                     <BulkStatEntry />
+                  </RoleGate>
+                } />
+                <Route path="admin/lab" element={
+                  <RoleGate allowedRoles={['Owner', 'Commissioner']}>
+                    <LabProvider>
+                      <LabDashboard />
+                    </LabProvider>
                   </RoleGate>
                 } />
                 <Route path="*" element={<PlaceholderPage title="Not Found" />} />
