@@ -120,17 +120,13 @@ const LabDashboard: React.FC = () => {
   };
 
   const handleBatchFire = () => {
-    if (window.confirm(`Are you sure you want to fire ${selectedSlots.length} selected coaches? They will be moved to the Staging Pool.`)) {
-      batchStageFire(selectedSlots);
-      setSelectedSlots([]);
-    }
+    batchStageFire(selectedSlots);
+    setSelectedSlots([]);
   };
 
   const handleBatchReset = () => {
-    if (window.confirm(`Reset ${selectedSlots.length} slots to CPU?`)) {
-      batchReset(selectedSlots);
-      setSelectedSlots([]);
-    }
+    batchReset(selectedSlots);
+    setSelectedSlots([]);
   };
 
   if (activeTab === 'firing') {
@@ -145,7 +141,7 @@ const LabDashboard: React.FC = () => {
     <div className="h-screen bg-black text-white flex flex-col overflow-hidden font-sans">
       {/* Stationary Header */}
       <header className="shrink-0 bg-zinc-950 border-b border-zinc-900 p-4 z-40">
-        <div className="max-w-[1920px] mx-auto flex flex-col gap-4">
+        <div className="max-w-full mx-auto flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="p-2 bg-orange-600 rounded-lg">

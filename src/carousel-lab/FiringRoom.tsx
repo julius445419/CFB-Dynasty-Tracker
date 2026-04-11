@@ -38,8 +38,17 @@ const FiringRoom: React.FC<FiringRoomProps> = ({ activeTab, setActiveTab }) => {
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [mobileRoleIndex, setMobileRoleIndex] = useState<Record<string, number>>({}); // schoolId -> index
+  const [notifications, setNotifications] = useState<{id: string, message: string, type: 'fire' | 'undo'}[]>([]);
   
   const parentRef = useRef<HTMLDivElement>(null);
+
+  const addNotification = (message: string, type: 'fire' | 'undo') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 4000);
+  };
 
   const filteredSchools = useMemo(() => {
     return SCHOOLS.filter(s => {
@@ -112,19 +121,17 @@ const FiringRoom: React.FC<FiringRoomProps> = ({ activeTab, setActiveTab }) => {
   const handleBatchFire = () => {
     const slotsToFire = selectedSlots.filter(id => !state.stagedFires.includes(id));
     if (slotsToFire.length === 0) return;
-    if (window.confirm(`Fire ${slotsToFire.length} selected coaches?`)) {
-      batchStageFire(slotsToFire);
-      setSelectedSlots([]);
-    }
+    batchStageFire(slotsToFire);
+    addNotification(`${slotsToFire.length} coaches added to Staging Pool`, 'fire');
+    setSelectedSlots([]);
   };
 
   const handleBatchUndo = () => {
     const slotsToUndo = selectedSlots.filter(id => state.stagedFires.includes(id));
     if (slotsToUndo.length === 0) return;
-    if (window.confirm(`Undo firing for ${slotsToUndo.length} selected coaches?`)) {
-      batchUndoFire(slotsToUndo);
-      setSelectedSlots([]);
-    }
+    batchUndoFire(slotsToUndo);
+    addNotification(`Reinstated ${slotsToUndo.length} coaches`, 'undo');
+    setSelectedSlots([]);
   };
 
   const firedPersonas = (state.stagedFires || []).map(slotId => {
@@ -138,7 +145,7 @@ const FiringRoom: React.FC<FiringRoomProps> = ({ activeTab, setActiveTab }) => {
     <div className="h-screen bg-black text-white flex flex-col overflow-hidden font-sans">
       {/* Stationary Header */}
       <header className="shrink-0 bg-zinc-950 border-b border-zinc-900 p-4 z-40">
-        <div className="max-w-[1920px] mx-auto flex flex-col gap-4">
+        <div className="max-w-full mx-auto flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="p-2 bg-red-600 rounded-lg">
@@ -397,7 +404,10 @@ const FiringRoom: React.FC<FiringRoomProps> = ({ activeTab, setActiveTab }) => {
                                 {persona && (
                                   isFired ? (
                                     <button 
-                                      onClick={() => undoFire(slot.id)}
+                                      onClick={() => {
+                                        undoFire(slot.id);
+                                        addNotification(`Reinstated ${persona.name}`, 'undo');
+                                      }}
                                       className="p-1 bg-zinc-900 rounded text-zinc-500 hover:text-white transition-colors"
                                       title="Undo Firing"
                                     >
@@ -405,7 +415,10 @@ const FiringRoom: React.FC<FiringRoomProps> = ({ activeTab, setActiveTab }) => {
                                     </button>
                                   ) : (
                                     <button 
-                                      onClick={() => stageFire(slot.id)}
+                                      onClick={() => {
+                                        stageFire(slot.id);
+                                        addNotification(`${persona.name} added to Staging Pool`, 'fire');
+                                      }}
                                       className="p-1 bg-zinc-900 rounded text-zinc-700 hover:text-red-500 transition-colors"
                                       title="Fire Coach"
                                     >
@@ -516,7 +529,15 @@ const FiringRoom: React.FC<FiringRoomProps> = ({ activeTab, setActiveTab }) => {
 
                           return (
                             <button 
-                              onClick={() => isFired ? undoFire(slot.id) : stageFire(slot.id)}
+                              onClick={() => {
+                                if (isFired) {
+                                  undoFire(slot.id);
+                                  addNotification(`Reinstated ${persona.name}`, 'undo');
+                                } else {
+                                  stageFire(slot.id);
+                                  addNotification(`${persona.name} added to Staging Pool`, 'fire');
+                                }
+                              }}
                               className={`p-2 rounded-lg shrink-0 transition-all active:scale-90 ${
                                 isFired 
                                   ? 'bg-zinc-800 text-white border border-zinc-700' 
@@ -535,6 +556,28 @@ const FiringRoom: React.FC<FiringRoomProps> = ({ activeTab, setActiveTab }) => {
             </div>
           </div>
         </main>
+      </div>
+
+      {/* Notifications */}
+      <div className="fixed top-24 right-8 z-[100] flex flex-col gap-2 pointer-events-none">
+        <AnimatePresence>
+          {notifications.map(n => (
+            <motion.div
+              key={n.id}
+              initial={{ opacity: 0, x: 20, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+              className={`px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 backdrop-blur-md ${
+                n.type === 'fire' 
+                  ? 'bg-red-600/90 border-red-500 text-white' 
+                  : 'bg-zinc-900/90 border-zinc-800 text-white'
+              }`}
+            >
+              {n.type === 'fire' ? <Trash2 size={16} /> : <RotateCcw size={16} />}
+              <span className="text-[11px] font-black uppercase tracking-widest">{n.message}</span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
 
       {/* Floating Action Bar */}

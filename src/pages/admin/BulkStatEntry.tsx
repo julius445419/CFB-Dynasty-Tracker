@@ -360,7 +360,7 @@ export const BulkStatEntry: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-6 pb-24 max-w-[1600px] mx-auto">
+    <div className="p-6 space-y-6 pb-24 max-w-full mx-auto">
       <header className="flex flex-col gap-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">

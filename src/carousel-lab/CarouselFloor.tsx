@@ -96,7 +96,7 @@ const CarouselFloor: React.FC<CarouselFloorProps> = ({ activeTab, setActiveTab }
   return (
     <div className="min-h-screen bg-black text-white p-6 pb-24 font-sans">
       {/* Header */}
-      <header className="max-w-[1920px] mx-auto mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <header className="max-w-full mx-auto mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-blue-600 rounded-lg">
@@ -161,7 +161,7 @@ const CarouselFloor: React.FC<CarouselFloorProps> = ({ activeTab, setActiveTab }
             </div>
       </header>
 
-      <main className="max-w-[1920px] mx-auto space-y-6">
+      <main className="max-w-full mx-auto space-y-6">
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-500" size={20} />
@@ -247,7 +247,7 @@ const CarouselFloor: React.FC<CarouselFloorProps> = ({ activeTab, setActiveTab }
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-zinc-900 border border-zinc-800 rounded-[40px] z-[101] flex flex-col overflow-hidden shadow-2xl"
+              className="fixed inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl md:max-h-[85vh] bg-zinc-900 border border-zinc-800 rounded-[40px] z-[101] flex flex-col overflow-hidden shadow-2xl"
             >
               <div className="p-8 border-b border-zinc-800 shrink-0 flex items-center justify-between">
                 <div>
@@ -327,9 +327,7 @@ const CarouselFloor: React.FC<CarouselFloorProps> = ({ activeTab, setActiveTab }
                   <button 
                     key={persona!.id}
                     onClick={() => {
-                      if (window.confirm(`Hiring ${persona!.name} will leave a vacancy at ${slot.schoolId}. Proceed?`)) {
-                        handleHire(persona!.id);
-                      }
+                      handleHire(persona!.id);
                     }}
                     className="w-full p-4 bg-zinc-950 border border-zinc-800 rounded-2xl flex items-center justify-between hover:border-red-600/50 hover:bg-zinc-900 transition-all group"
                   >

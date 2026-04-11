@@ -279,7 +279,7 @@ export const AppLayout: React.FC = () => {
           </button>
         </header>
 
-        <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-full px-4 md:px-8 lg:px-12">
           <Outlet />
         </div>
       </main>
