@@ -118,29 +118,29 @@ export const BoxScoreView: React.FC<BoxScoreViewProps> = ({ game, homeTeam, away
     const defense = teamStats.filter(s => (s.tackles || 0) > 0 || (s.sacks || 0) > 0 || (s.ints || 0) > 0);
 
     return (
-      <div className="space-y-6">
-        <h3 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] px-2">{teamName} Individual Stats</h3>
+      <div className="space-y-4">
+        <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] px-2">{teamName} Individual Stats</h3>
         
         {passing.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest px-2">Passing</p>
-            <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 overflow-hidden">
-              <table className="w-full text-left text-[10px]">
+          <div className="space-y-1">
+            <p className="text-[9px] font-black text-orange-500 uppercase tracking-widest px-2">Passing</p>
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden">
+              <table className="w-full text-left text-[9px]">
                 <thead className="bg-zinc-800/50 text-zinc-500 uppercase font-black">
                   <tr>
-                    <th className="px-4 py-2">Player</th>
-                    <th className="px-4 py-2 text-right">Yds</th>
-                    <th className="px-4 py-2 text-right">TD</th>
-                    <th className="px-4 py-2 text-right">INT</th>
+                    <th className="px-3 py-1.5">Player</th>
+                    <th className="px-3 py-1.5 text-right">Yds</th>
+                    <th className="px-3 py-1.5 text-right">TD</th>
+                    <th className="px-3 py-1.5 text-right">INT</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
                   {passing.map(s => (
                     <tr key={s.playerId} className="text-zinc-300 font-bold">
-                      <td className="px-4 py-2">{players[s.playerId]?.name || 'Unknown'}</td>
-                      <td className="px-4 py-2 text-right">{s.passYds}</td>
-                      <td className="px-4 py-2 text-right">{s.passTDs}</td>
-                      <td className="px-4 py-2 text-right">{s.passInts}</td>
+                      <td className="px-3 py-1.5">{players[s.playerId]?.name || 'Unknown'}</td>
+                      <td className="px-3 py-1.5 text-right">{s.passYds}</td>
+                      <td className="px-3 py-1.5 text-right">{s.passTDs}</td>
+                      <td className="px-3 py-1.5 text-right">{s.passInts}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -150,23 +150,23 @@ export const BoxScoreView: React.FC<BoxScoreViewProps> = ({ game, homeTeam, away
         )}
 
         {rushing.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest px-2">Rushing</p>
-            <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 overflow-hidden">
-              <table className="w-full text-left text-[10px]">
+          <div className="space-y-1">
+            <p className="text-[9px] font-black text-orange-500 uppercase tracking-widest px-2">Rushing</p>
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden">
+              <table className="w-full text-left text-[9px]">
                 <thead className="bg-zinc-800/50 text-zinc-500 uppercase font-black">
                   <tr>
-                    <th className="px-4 py-2">Player</th>
-                    <th className="px-4 py-2 text-right">Yds</th>
-                    <th className="px-4 py-2 text-right">TD</th>
+                    <th className="px-3 py-1.5">Player</th>
+                    <th className="px-3 py-1.5 text-right">Yds</th>
+                    <th className="px-3 py-1.5 text-right">TD</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
                   {rushing.map(s => (
                     <tr key={s.playerId} className="text-zinc-300 font-bold">
-                      <td className="px-4 py-2">{players[s.playerId]?.name || 'Unknown'}</td>
-                      <td className="px-4 py-2 text-right">{s.rushYds}</td>
-                      <td className="px-4 py-2 text-right">{s.rushTDs}</td>
+                      <td className="px-3 py-1.5">{players[s.playerId]?.name || 'Unknown'}</td>
+                      <td className="px-3 py-1.5 text-right">{s.rushYds}</td>
+                      <td className="px-3 py-1.5 text-right">{s.rushTDs}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -176,25 +176,25 @@ export const BoxScoreView: React.FC<BoxScoreViewProps> = ({ game, homeTeam, away
         )}
 
         {receiving.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest px-2">Receiving</p>
-            <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 overflow-hidden">
-              <table className="w-full text-left text-[10px]">
+          <div className="space-y-1">
+            <p className="text-[9px] font-black text-orange-500 uppercase tracking-widest px-2">Receiving</p>
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden">
+              <table className="w-full text-left text-[9px]">
                 <thead className="bg-zinc-800/50 text-zinc-500 uppercase font-black">
                   <tr>
-                    <th className="px-4 py-2">Player</th>
-                    <th className="px-4 py-2 text-right">Rec</th>
-                    <th className="px-4 py-2 text-right">Yds</th>
-                    <th className="px-4 py-2 text-right">TD</th>
+                    <th className="px-3 py-1.5">Player</th>
+                    <th className="px-3 py-1.5 text-right">Rec</th>
+                    <th className="px-3 py-1.5 text-right">Yds</th>
+                    <th className="px-3 py-1.5 text-right">TD</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
                   {receiving.map(s => (
                     <tr key={s.playerId} className="text-zinc-300 font-bold">
-                      <td className="px-4 py-2">{players[s.playerId]?.name || 'Unknown'}</td>
-                      <td className="px-4 py-2 text-right">{s.receptions}</td>
-                      <td className="px-4 py-2 text-right">{s.recYds}</td>
-                      <td className="px-4 py-2 text-right">{s.recTDs}</td>
+                      <td className="px-3 py-1.5">{players[s.playerId]?.name || 'Unknown'}</td>
+                      <td className="px-3 py-1.5 text-right">{s.receptions}</td>
+                      <td className="px-3 py-1.5 text-right">{s.recYds}</td>
+                      <td className="px-3 py-1.5 text-right">{s.recTDs}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -204,25 +204,25 @@ export const BoxScoreView: React.FC<BoxScoreViewProps> = ({ game, homeTeam, away
         )}
 
         {defense.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest px-2">Defense</p>
-            <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 overflow-hidden">
-              <table className="w-full text-left text-[10px]">
+          <div className="space-y-1">
+            <p className="text-[9px] font-black text-orange-500 uppercase tracking-widest px-2">Defense</p>
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden">
+              <table className="w-full text-left text-[9px]">
                 <thead className="bg-zinc-800/50 text-zinc-500 uppercase font-black">
                   <tr>
-                    <th className="px-4 py-2">Player</th>
-                    <th className="px-4 py-2 text-right">Tkl</th>
-                    <th className="px-4 py-2 text-right">Sck</th>
-                    <th className="px-4 py-2 text-right">INT</th>
+                    <th className="px-3 py-1.5">Player</th>
+                    <th className="px-3 py-1.5 text-right">Tkl</th>
+                    <th className="px-3 py-1.5 text-right">Sck</th>
+                    <th className="px-3 py-1.5 text-right">INT</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
                   {defense.map(s => (
                     <tr key={s.playerId} className="text-zinc-300 font-bold">
-                      <td className="px-4 py-2">{players[s.playerId]?.name || 'Unknown'}</td>
-                      <td className="px-4 py-2 text-right">{s.tackles}</td>
-                      <td className="px-4 py-2 text-right">{s.sacks}</td>
-                      <td className="px-4 py-2 text-right">{s.ints}</td>
+                      <td className="px-3 py-1.5">{players[s.playerId]?.name || 'Unknown'}</td>
+                      <td className="px-3 py-1.5 text-right">{s.tackles}</td>
+                      <td className="px-3 py-1.5 text-right">{s.sacks}</td>
+                      <td className="px-3 py-1.5 text-right">{s.ints}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -235,19 +235,19 @@ export const BoxScoreView: React.FC<BoxScoreViewProps> = ({ game, homeTeam, away
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between px-6 mb-2">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between px-4 mb-1">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: awayColor }} />
-          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{awayTeam.name}</span>
+          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: awayColor }} />
+          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{awayTeam.name}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{homeTeam.name}</span>
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: homeColor }} />
+          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{homeTeam.name}</span>
+          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: homeColor }} />
         </div>
       </div>
 
-      <div className="bg-zinc-900/50 rounded-[2rem] border border-zinc-800 overflow-hidden">
+      <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 overflow-hidden">
         {statsList.map((stat, index) => {
           const isAwayBetter = stat.lowerIsBetter 
             ? (stat.awayVal ?? stat.away) < (stat.homeVal ?? stat.home)
@@ -260,21 +260,21 @@ export const BoxScoreView: React.FC<BoxScoreViewProps> = ({ game, homeTeam, away
           return (
             <div 
               key={stat.label}
-              className={`flex items-center justify-between px-6 py-4 border-b border-zinc-800/50 last:border-0 transition-colors hover:bg-zinc-800/30`}
+              className={`flex items-center justify-between px-4 py-2 border-b border-zinc-800/50 last:border-0 transition-colors hover:bg-zinc-800/30`}
             >
               <div 
-                className={`flex-1 text-lg font-black italic tracking-tighter ${isAwayBetter ? 'font-black' : 'text-zinc-500 font-medium'}`}
+                className={`flex-1 text-base font-black italic tracking-tighter ${isAwayBetter ? 'font-black' : 'text-zinc-500 font-medium'}`}
                 style={{ color: isAwayBetter ? awayColor : undefined }}
               >
                 {stat.away}
               </div>
               
               <div className="flex-1 text-center">
-                <span className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em]">{stat.label}</span>
+                <span className="text-[8px] font-black text-zinc-600 uppercase tracking-[0.2em]">{stat.label}</span>
               </div>
 
               <div 
-                className={`flex-1 text-right text-lg font-black italic tracking-tighter ${isHomeBetter ? 'font-black' : 'text-zinc-500 font-medium'}`}
+                className={`flex-1 text-right text-base font-black italic tracking-tighter ${isHomeBetter ? 'font-black' : 'text-zinc-500 font-medium'}`}
                 style={{ color: isHomeBetter ? homeColor : undefined }}
               >
                 {stat.home}
@@ -285,16 +285,16 @@ export const BoxScoreView: React.FC<BoxScoreViewProps> = ({ game, homeTeam, away
       </div>
 
       {/* Player Stats Section */}
-      <div className="space-y-4">
+      <div className="space-y-2">
         <button 
           onClick={() => setShowPlayerStats(!showPlayerStats)}
-          className="w-full flex items-center justify-between px-6 py-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl text-zinc-400 hover:text-white transition-all"
+          className="w-full flex items-center justify-between px-4 py-2.5 bg-zinc-900/50 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all"
         >
           <div className="flex items-center gap-2">
-            <User size={14} className="text-orange-500" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Individual Player Stats</span>
+            <User size={12} className="text-orange-500" />
+            <span className="text-[9px] font-black uppercase tracking-widest">Individual Stats</span>
           </div>
-          {showPlayerStats ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          {showPlayerStats ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
 
         <AnimatePresence>
@@ -303,7 +303,7 @@ export const BoxScoreView: React.FC<BoxScoreViewProps> = ({ game, homeTeam, away
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden space-y-8"
+              className="overflow-hidden space-y-4"
             >
               {loading ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-3">

@@ -16,6 +16,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Portal } from './pages/Portal';
 import { MyTeam } from './pages/MyTeam';
 import { JoinLeague } from './pages/JoinLeague';
+import { ClaimProfile } from './pages/ClaimProfile';
 import { RequestTeam } from './pages/RequestTeam';
 import { PendingRequests } from './pages/admin/PendingRequests';
 import { MemberManagement } from './pages/admin/MemberManagement';
@@ -64,6 +65,13 @@ export default function App() {
               <Route path="/join-league" element={
                 <ProtectedRoute>
                   <JoinLeague />
+                </ProtectedRoute>
+              } />
+              <Route path="/claim-profile" element={
+                <ProtectedRoute>
+                  <RoleGate allowedRoles={['User', 'Owner', 'Commissioner', 'Player', 'Unassigned']}>
+                    <ClaimProfile />
+                  </RoleGate>
                 </ProtectedRoute>
               } />
               <Route path="/request-team" element={

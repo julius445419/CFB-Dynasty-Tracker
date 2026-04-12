@@ -3,7 +3,7 @@ import { useAuth } from './AuthContext';
 import { collection, query, where, onSnapshot, limit, collectionGroup, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
-export type UserRole = 'Owner' | 'Commissioner' | 'Player' | 'Unassigned';
+export type UserRole = 'Owner' | 'Commissioner' | 'Player' | 'User' | 'Unassigned';
 
 import { 
   League, 

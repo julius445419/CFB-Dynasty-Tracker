@@ -32,7 +32,7 @@ export async function commitStaffingChanges(
   });
 
   for (const coach of changedCoaches) {
-    const coachRef = doc(db, 'leagues', leagueId, 'coaches', coach.id);
+    const coachRef = doc(db, 'coaches', coach.id);
     
     // Prepare the update object
     const updateData: any = {

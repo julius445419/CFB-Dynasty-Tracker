@@ -200,7 +200,7 @@ const MatchupHub: React.FC = () => {
         
         if (!homeTeam || !awayTeam) return;
         
-        const isConfGame = homeTeam.conference === awayTeam.conference;
+        const isConfGame = (homeTeam.conference?.toUpperCase() === awayTeam.conference?.toUpperCase());
         const homeWon = (game.homeScore ?? 0) > (game.awayScore ?? 0);
         const awayWon = (game.awayScore ?? 0) > (game.homeScore ?? 0);
 
@@ -651,7 +651,23 @@ const MatchupHub: React.FC = () => {
       filtered = games.filter(game => {
         const home = teams[game.homeTeamId];
         const away = teams[game.awayTeamId];
-        return home?.conference === selectedConference || away?.conference === selectedConference;
+        const searchConf = selectedConference.toUpperCase();
+        
+        const checkMatch = (teamConf?: string) => {
+          if (!teamConf) return false;
+          const upperTeamConf = teamConf.toUpperCase();
+          if (upperTeamConf === searchConf) return true;
+          
+          // Handle Aliases
+          if (searchConf === 'MWC' && upperTeamConf === 'MOUNTAIN WEST') return true;
+          if (searchConf === 'MOUNTAIN WEST' && upperTeamConf === 'MWC') return true;
+          if (searchConf === 'CUSA' && upperTeamConf === 'C-USA') return true;
+          if (searchConf === 'C-USA' && upperTeamConf === 'CUSA') return true;
+          
+          return false;
+        };
+
+        return checkMatch(home?.conference) || checkMatch(away?.conference);
       });
     }
 
@@ -717,7 +733,7 @@ const MatchupHub: React.FC = () => {
         </div>
       </div>
 
-      <div className="px-4 space-y-4">
+      <div className="px-4 space-y-3">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Calendar className="w-5 h-5 text-orange-500" />
@@ -760,7 +776,7 @@ const MatchupHub: React.FC = () => {
               <p className="font-medium">No games found for the selected criteria</p>
             </motion.div>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid gap-3">
               {sortedGames.map((game) => (
                 <GameCard 
                   key={game.id} 
@@ -875,7 +891,7 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, 
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className={`relative overflow-hidden bg-zinc-900 border rounded-3xl p-5 transition-all ${
+      className={`relative overflow-hidden bg-zinc-900 border rounded-3xl p-4 transition-all ${
         game.isUvU 
           ? 'border-orange-500/30 shadow-[0_0_20px_rgba(249,115,22,0.05)]' 
           : 'border-zinc-800'
@@ -890,37 +906,37 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, 
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-1">
         {/* Away Team Row */}
-        <div className={`grid grid-cols-[auto_1fr] items-center gap-4 transition-opacity ${isFinal && !awayWon ? 'opacity-60' : 'opacity-100'}`}>
+        <div className={`grid grid-cols-[auto_1fr] items-center gap-3 transition-opacity ${isFinal && !awayWon ? 'opacity-60' : 'opacity-100'}`}>
           <div className="relative">
             {awayTeam.currentRank && (
-              <div className={`absolute -top-2 -left-2 text-white text-[10px] font-black px-1.5 py-0.5 rounded border z-10 ${awayWon ? 'bg-orange-600 border-orange-500' : 'bg-zinc-800 border-zinc-700'}`}>
+              <div className={`absolute -top-1.5 -left-1.5 text-white text-[9px] font-black px-1 py-0.5 rounded border z-10 ${awayWon ? 'bg-orange-600 border-orange-500' : 'bg-zinc-800 border-zinc-700'}`}>
                 {awayTeam.currentRank}
               </div>
             )}
-            <div className={`w-14 h-14 rounded-2xl p-2 flex items-center justify-center shadow-inner transition-all ${awayWon ? 'bg-orange-500/10 ring-2 ring-orange-500/50' : 'bg-zinc-800'}`}>
+            <div className={`w-10 h-10 rounded-xl p-1.5 flex items-center justify-center shadow-inner transition-all ${awayWon ? 'bg-orange-500/10 ring-2 ring-orange-500/50' : 'bg-zinc-800'}`}>
               <TeamLogo team={awayTeam} className="w-full h-full object-contain" />
             </div>
           </div>
           <div className="flex items-center justify-between min-w-0">
             <div className="min-w-0">
-              <h3 className={`text-lg font-black uppercase italic tracking-tight leading-tight transition-colors ${awayWon ? 'text-orange-500' : 'text-white'}`}>
+              <h3 className={`text-base font-black uppercase italic tracking-tight leading-tight transition-colors ${awayWon ? 'text-orange-500' : 'text-white'}`}>
                 {awayTeam.name}
               </h3>
-              <div className="flex flex-col">
-                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              <div className="flex items-center gap-2">
+                <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
                   {awayTeam.wins}-{awayTeam.losses} • {awayTeam.conference}
                 </p>
                 {awayTeam.coachName && (
-                  <p className="text-[9px] font-black text-orange-500/60 uppercase tracking-tighter italic">
+                  <p className="text-[8px] font-black text-orange-500/60 uppercase tracking-tighter italic">
                     Coach {awayTeam.coachName}
                   </p>
                 )}
               </div>
             </div>
             {isFinal && (
-              <span className={`text-3xl font-black tabular-nums ${awayWon ? 'text-white' : 'text-zinc-600'}`}>
+              <span className={`text-2xl font-black tabular-nums ${awayWon ? 'text-white' : 'text-zinc-600'}`}>
                 {game.awayScore || 0}
               </span>
             )}
@@ -928,44 +944,42 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, 
         </div>
 
         {/* AT Badge */}
-        <div className="flex items-center gap-4">
-          <div className="h-px flex-1 bg-zinc-800/50" />
-          <div className="bg-zinc-950 px-3 py-1 rounded-full border border-zinc-800">
-            <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest italic">AT</span>
-          </div>
-          <div className="h-px flex-1 bg-zinc-800/50" />
+        <div className="flex items-center gap-2">
+          <div className="h-px flex-1 bg-zinc-800/30" />
+          <span className="text-[8px] font-black text-zinc-700 uppercase tracking-widest italic">VS</span>
+          <div className="h-px flex-1 bg-zinc-800/30" />
         </div>
 
         {/* Home Team Row */}
-        <div className={`grid grid-cols-[auto_1fr] items-center gap-4 transition-opacity ${isFinal && !homeWon ? 'opacity-60' : 'opacity-100'}`}>
+        <div className={`grid grid-cols-[auto_1fr] items-center gap-3 transition-opacity ${isFinal && !homeWon ? 'opacity-60' : 'opacity-100'}`}>
           <div className="relative">
             {homeTeam.currentRank && (
-              <div className={`absolute -top-2 -left-2 text-white text-[10px] font-black px-1.5 py-0.5 rounded border z-10 ${homeWon ? 'bg-orange-600 border-orange-500' : 'bg-zinc-800 border-zinc-700'}`}>
+              <div className={`absolute -top-1.5 -left-1.5 text-white text-[9px] font-black px-1 py-0.5 rounded border z-10 ${homeWon ? 'bg-orange-600 border-orange-500' : 'bg-zinc-800 border-zinc-700'}`}>
                 {homeTeam.currentRank}
               </div>
             )}
-            <div className={`w-14 h-14 rounded-2xl p-2 flex items-center justify-center shadow-inner transition-all ${homeWon ? 'bg-orange-500/10 ring-2 ring-orange-500/50' : 'bg-zinc-800'}`}>
+            <div className={`w-10 h-10 rounded-xl p-1.5 flex items-center justify-center shadow-inner transition-all ${homeWon ? 'bg-orange-500/10 ring-2 ring-orange-500/50' : 'bg-zinc-800'}`}>
               <TeamLogo team={homeTeam} className="w-full h-full object-contain" />
             </div>
           </div>
           <div className="flex items-center justify-between min-w-0">
             <div className="min-w-0">
-              <h3 className={`text-lg font-black uppercase italic tracking-tight leading-tight transition-colors ${homeWon ? 'text-orange-500' : 'text-white'}`}>
+              <h3 className={`text-base font-black uppercase italic tracking-tight leading-tight transition-colors ${homeWon ? 'text-orange-500' : 'text-white'}`}>
                 {homeTeam.name}
               </h3>
-              <div className="flex flex-col">
-                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              <div className="flex items-center gap-2">
+                <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
                   {homeTeam.wins}-{homeTeam.losses} • {homeTeam.conference}
                 </p>
                 {homeTeam.coachName && (
-                  <p className="text-[9px] font-black text-orange-500/60 uppercase tracking-tighter italic">
+                  <p className="text-[8px] font-black text-orange-500/60 uppercase tracking-tighter italic">
                     Coach {homeTeam.coachName}
                   </p>
                 )}
               </div>
             </div>
             {isFinal && (
-              <span className={`text-3xl font-black tabular-nums ${homeWon ? 'text-white' : 'text-zinc-600'}`}>
+              <span className={`text-2xl font-black tabular-nums ${homeWon ? 'text-white' : 'text-zinc-600'}`}>
                 {game.homeScore || 0}
               </span>
             )}
@@ -974,45 +988,45 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, 
       </div>
 
       {/* Actions & Reports */}
-      <div className="mt-6 pt-6 border-t border-zinc-800/50 space-y-4">
+      <div className="mt-3 pt-3 border-t border-zinc-800/50 space-y-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {!isFinal ? (
               <button
                 onClick={() => setShowScoutingReport(!showScoutingReport)}
-                className="flex items-center gap-2 text-zinc-500 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all"
+                className="flex items-center gap-1.5 text-zinc-500 hover:text-white text-[9px] font-black uppercase tracking-widest transition-all"
               >
-                <Activity className={`w-3.5 h-3.5 transition-transform ${showScoutingReport ? 'rotate-180' : ''}`} />
-                {showScoutingReport ? 'Hide Scouting' : 'Scouting Report'}
+                <Activity className={`w-3 h-3 transition-transform ${showScoutingReport ? 'rotate-180' : ''}`} />
+                {showScoutingReport ? 'Hide' : 'Scouting'}
               </button>
             ) : (
               <button
                 onClick={() => setShowBoxScore(!showBoxScore)}
-                className="flex items-center gap-2 text-zinc-500 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all"
+                className="flex items-center gap-1.5 text-zinc-500 hover:text-white text-[9px] font-black uppercase tracking-widest transition-all"
               >
-                <Activity className={`w-3.5 h-3.5 transition-transform ${showBoxScore ? 'rotate-180' : ''}`} />
-                {showBoxScore ? 'Hide Box Score' : 'View Box Score'}
+                <Activity className={`w-3 h-3 transition-transform ${showBoxScore ? 'rotate-180' : ''}`} />
+                {showBoxScore ? 'Hide' : 'Box Score'}
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {canLogScore && (
               <button
                 onClick={onLogScore}
-                className="flex items-center gap-1.5 bg-white text-black text-[10px] font-black px-4 py-2 rounded-xl hover:bg-zinc-200 transition-all active:scale-95 uppercase tracking-widest shadow-lg shadow-white/5"
+                className="flex items-center gap-1 bg-white text-black text-[9px] font-black px-3 py-1.5 rounded-lg hover:bg-zinc-200 transition-all active:scale-95 uppercase tracking-widest shadow-lg shadow-white/5"
               >
-                <Trophy className="w-3 h-3" />
-                Log Score
+                <Trophy className="w-2.5 h-2.5" />
+                Score
               </button>
             )}
             {canLogStats && (
               <button
                 onClick={onLogScore}
-                className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-black px-4 py-2 rounded-xl border border-zinc-700 transition-all uppercase tracking-widest"
+                className="flex items-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[9px] font-black px-3 py-1.5 rounded-lg border border-zinc-700 transition-all uppercase tracking-widest"
               >
-                <PlusCircle className="w-3.5 h-3.5 text-orange-500" />
-                Edit Stats
+                <PlusCircle className="w-3 h-3 text-orange-500" />
+                Stats
               </button>
             )}
           </div>
@@ -1028,25 +1042,25 @@ const GameCard: React.FC<GameCardProps> = ({ game, teams, onLogScore, userRole, 
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden"
               >
-                <div className="py-4 space-y-3 bg-zinc-950/30 rounded-2xl border border-zinc-800/30 px-4">
+                <div className="py-2.5 space-y-1.5 bg-zinc-950/30 rounded-2xl border border-zinc-800/30 px-3">
                   {scoutingStats.map((stat, idx) => (
                     <div key={idx} className="grid grid-cols-5 items-center gap-2">
-                      <div className="col-span-2 flex items-center justify-end gap-2">
-                        <span className="text-[9px] font-black text-zinc-600">#{stat.teamB.rank}</span>
-                        <span className={`text-xs font-black ${stat.better === 'B' ? 'text-orange-500' : 'text-zinc-400'}`}>
+                      <div className="col-span-2 flex items-center justify-end gap-1.5">
+                        <span className="text-[8px] font-black text-zinc-600">#{stat.teamB.rank}</span>
+                        <span className={`text-[10px] font-black ${stat.better === 'B' ? 'text-orange-500' : 'text-zinc-400'}`}>
                           {stat.teamB.val.toFixed(1)}
                         </span>
                       </div>
-                      <div className="text-center px-1">
-                        <span className="text-[8px] font-black text-zinc-500 uppercase tracking-tighter">
+                      <div className="text-center px-0.5">
+                        <span className="text-[7px] font-black text-zinc-500 uppercase tracking-tighter leading-none block">
                           {stat.label}
                         </span>
                       </div>
-                      <div className="col-span-2 flex items-center justify-start gap-2">
-                        <span className={`text-xs font-black ${stat.better === 'A' ? 'text-orange-500' : 'text-zinc-400'}`}>
+                      <div className="col-span-2 flex items-center justify-start gap-1.5">
+                        <span className={`text-[10px] font-black ${stat.better === 'A' ? 'text-orange-500' : 'text-zinc-400'}`}>
                           {stat.teamA.val.toFixed(1)}
                         </span>
-                        <span className="text-[9px] font-black text-zinc-600">#{stat.teamA.rank}</span>
+                        <span className="text-[8px] font-black text-zinc-600">#{stat.teamA.rank}</span>
                       </div>
                     </div>
                   ))}
